@@ -1,0 +1,7 @@
+# ROS workspaces
+build/
+devel/
+install/
+log/
+*.pyc
+__pycache__/

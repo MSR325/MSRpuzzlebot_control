@@ -1,0 +1,6 @@
+# This can be used for starting a process 
+
+string active_source 
+---
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages
