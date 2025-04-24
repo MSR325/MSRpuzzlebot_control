@@ -73,6 +73,7 @@ class InverseKinematics(Node):
         self.current_pose_sub = self.create_subscription(
             Odometry, 'odom', self.current_pose_callback, 10
         )
+        
         self.left_setpoint_pub  = self.create_publisher(Float32, 'left/set_point', 10)
         self.right_setpoint_pub = self.create_publisher(Float32, 'right/set_point', 10)
         self.cmd_vel_pub        = self.create_publisher(Twist,   'ik_cmd_vel',   10)
