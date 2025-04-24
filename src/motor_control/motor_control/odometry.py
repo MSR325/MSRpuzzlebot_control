@@ -14,7 +14,7 @@ class OdometryNode(Node):
         super().__init__('odometry_node')
         # Declarar parámetros
         self.declare_parameter('wheel_radius', 0.05)       # [m]
-        self.declare_parameter('wheel_separation', 0.173)    # [m]
+        self.declare_parameter('wheel_separation', 0.19)    # [m]173
         self.declare_parameter('sample_time', 0.018)         # [s]
         # Parámetro para el ruido (sigma²)
         self.declare_parameter('sigma_squared', 0.1)
@@ -43,9 +43,9 @@ class OdometryNode(Node):
         
         # Subscripciones a las velocidades de las ruedas
         self.left_speed_sub = self.create_subscription(
-            Float32, 'left/motor_speed_y', self.left_speed_callback, 10)  # left/motor_speed_y VelocityEncL
+            Float32, 'VelocityEncL', self.left_speed_callback, qos_profile)  # left/motor_speed_y VelocityEncL
         self.right_speed_sub = self.create_subscription(
-            Float32, 'right/motor_speed_y', self.right_speed_callback, 10)  # right/motor_speed_y VelocityEncR
+            Float32, 'VelocityEncR', self.right_speed_callback, qos_profile)  # right/motor_speed_y VelocityEncR
         
         # Publicador de odometría
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
