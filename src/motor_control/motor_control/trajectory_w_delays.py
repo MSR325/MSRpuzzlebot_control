@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rcl_interfaces.srv import SetParameters
-from math import pi, sqrt, fabs
+from math import pi
 from std_msgs.msg import Float32
 from nav_msgs.msg import Odometry
 
@@ -16,89 +16,65 @@ class SquareTrajectoryUpdater(Node):
             (0.0, 1.0, 0.0),
             (0.0, 0.0, 0.0)
         ]
-        self.current_index = -1  # Start before first goal
+        self.current_index = 0
         self.target_node_name = '/inverse_kinematics'
         self.param_client = self.create_client(SetParameters, f'{self.target_node_name}/set_parameters')
 
-        # Current state
+        # Current robot state
         self.curr_x = None
         self.curr_y = None
         self.curr_yaw = None
 
+
         # Thresholds
-        self.position_threshold = 0.02
-        self.yaw_threshold = 0.05
+        self.position_threshold = 0.02  # meters
+        self.yaw_threshold = 0.05        # radians
 
-        self.last_sent = None
-        self.goal_active = False
-
-        # Subscriptions
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.create_subscription(Float32, '/current_yaw/data', self.yaw_callback, 10)
 
-        # Timer: continuously checks and updates goals
+        self.update_interval = 5.0
+        self.timer = self.create_timer(self.update_interval, self.timer_callback)
+
+        self.get_logger().info("🕒 Timer-based Square Trajectory Updater started")
+
+        # Timer to periodically check if goal is reached
         self.timer = self.create_timer(0.5, self.check_and_update)
 
-        self.get_logger().info("📍 Position-based Square Trajectory Updater started")
+        self.first_goal_sent = False
+        self.last_sent = None
+
+        # Send first goal after 1s to ensure service is up
+        self.create_timer(1.0, self.send_initial_goal)
 
     def odom_callback(self, msg):
         self.curr_x = msg.pose.pose.position.x
         self.curr_y = msg.pose.pose.position.y
-        self.get_logger().info(f"[ODOM] x={self.curr_x:.2f}, y={self.curr_y:.2f}")
 
     def yaw_callback(self, msg):
         self.curr_yaw = msg.data
-        self.get_logger().info(f"[YAW] yaw={self.curr_yaw:.2f}")
-        
-    def check_and_update(self):
-        print("asdfasdfasdf")
-        if self.curr_x is None or self.curr_y is None or self.curr_yaw is None:
-            print("ptmaaaa")
-            return
 
-        if self.current_index >= len(self.points) - 1 and self.goal_active is False:
-            print("ptmaaaa2")
-            self.get_logger().info("✅ All goals completed.")
+    def send_initial_goal(self):
+        if not self.first_goal_sent:
+            self.first_goal_sent = True
+            x, y, yaw = self.points[0]
+            self.set_inverse_kinematics_parameters(x, y, yaw)
+
+    def timer_callback(self):
+        self.current_index += 1
+
+        if self.current_index >= len(self.points):
+            self.get_logger().info("✅ Finished sending all goals.")
             self.destroy_timer(self.timer)
             return
 
-        if self.goal_active:
-            goal_x, goal_y, goal_yaw = self.points[self.current_index]
-            dx = goal_x - self.curr_x
-            dy = goal_y - self.curr_y
-            dyaw = self.angle_diff(goal_yaw, self.curr_yaw)
-
-            dist_error = sqrt(dx**2 + dy**2)
-            yaw_error = fabs(dyaw)
-
-            self.get_logger().info(
-                f"📍 At x={self.curr_x:.2f}, y={self.curr_y:.2f}, yaw={self.curr_yaw:.2f} → "
-                f"Goal: x={goal_x:.2f}, y={goal_y:.2f}, yaw={goal_yaw:.2f} | "
-                f"Errors: dist={dist_error:.3f}, yaw={yaw_error:.3f}"
-            )
-
-            if dist_error < self.position_threshold and yaw_error < self.yaw_threshold:
-                self.get_logger().info(f"✅ Goal {self.current_index} reached.")
-                self.goal_active = False
-
-        if not self.goal_active and self.current_index < len(self.points) - 1:
-            self.current_index += 1
-            x, y, yaw = self.points[self.current_index]
-            self.set_inverse_kinematics_parameters(x, y, yaw)
-
-    def angle_diff(self, a, b):
-        d = a - b
-        while d > pi:
-            d -= 2 * pi
-        while d < -pi:
-            d += 2 * pi
-        return d
+        x, y, yaw = self.points[self.current_index]
+        self.set_inverse_kinematics_parameters(x, y, yaw)
 
     def set_inverse_kinematics_parameters(self, x, y, yaw):
         if self.last_sent == (x, y, yaw):
-            return
+            return  # Skip duplicate goal
         self.last_sent = (x, y, yaw)
-        self.goal_active = True
 
         self.get_logger().info(f"➡️ Sending goal: x={x:.2f}, y={y:.2f}, yaw={yaw:.2f}")
 
