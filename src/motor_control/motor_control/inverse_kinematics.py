@@ -17,7 +17,7 @@ class InverseKinematics(Node):
 
         # Parámetros de cinemática y controlador
         self.declare_parameter('wheel_radius', 0.05)
-        self.declare_parameter('wheel_separation', 0.15)
+        self.declare_parameter('wheel_separation', 0.173)
         self.declare_parameter('sample_time', 0.018)
 
         # PID para posición

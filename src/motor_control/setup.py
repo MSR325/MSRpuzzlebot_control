@@ -42,6 +42,9 @@ setup(
             'escaneo_3d = motor_control.escaneo_3d_node:main',
             'square_path_ctrl = motor_control.square_path_ctrl:main', 
             'cubic_control = motor_control.cubic_control:main',
+            'path_generator = motor_control.path_generator:main',
+            'left_motor_controller = motor_control.left_motor_controller:main',
+            'right_motor_controller = motor_control.right_motor_controller:main',
         ],
     },
 )
