@@ -16,6 +16,9 @@ class SquareTrajectoryUpdater(Node):
             (0.0, 1.0, 0.0),
             (0.0, 0.0, 0.0)
         ]
+
+        self.settling_timer = None
+
         self.current_index = -1  # Start before first goal
         self.target_node_name = '/inverse_kinematics'
         self.param_client = self.create_client(SetParameters, f'{self.target_node_name}/set_parameters')
@@ -34,7 +37,7 @@ class SquareTrajectoryUpdater(Node):
 
         # Subscriptions
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
-        self.create_subscription(Float32, '/current_yaw/data', self.yaw_callback, 10)
+        self.create_subscription(Float32, '/current_yaw', self.yaw_callback, 10)
 
         # Timer: continuously checks and updates goals
         self.timer = self.create_timer(0.5, self.check_and_update)
@@ -53,7 +56,7 @@ class SquareTrajectoryUpdater(Node):
     def check_and_update(self):
         print("asdfasdfasdf")
         if self.curr_x is None or self.curr_y is None or self.curr_yaw is None:
-            print("ptmaaaa")
+            print("ptm")
             return
 
         if self.current_index >= len(self.points) - 1 and self.goal_active is False:
@@ -78,13 +81,23 @@ class SquareTrajectoryUpdater(Node):
             )
 
             if dist_error < self.position_threshold and yaw_error < self.yaw_threshold:
-                self.get_logger().info(f"✅ Goal {self.current_index} reached.")
-                self.goal_active = False
+                if self.settling_timer is None:
+                    self.get_logger().info(f"✅ Goal {self.current_index} reached. Waiting to settle...")
+                    self.settling_timer = self.create_timer(1.0, self.settle_and_continue)  # 2 second delay
+
 
         if not self.goal_active and self.current_index < len(self.points) - 1:
             self.current_index += 1
             x, y, yaw = self.points[self.current_index]
             self.set_inverse_kinematics_parameters(x, y, yaw)
+
+    def settle_and_continue(self):
+        self.get_logger().info("⏳ Settling complete. Moving to next goal.")
+        self.goal_active = False
+        if self.settling_timer:
+            self.settling_timer.cancel()
+            self.settling_timer = None
+
 
     def angle_diff(self, a, b):
         d = a - b
