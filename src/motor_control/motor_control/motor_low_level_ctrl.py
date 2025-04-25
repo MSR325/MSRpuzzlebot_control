@@ -3,6 +3,7 @@ from rclpy.node import Node
 from std_msgs.msg import Float32
 from std_msgs.msg import Float32MultiArray
 from rcl_interfaces.msg import SetParametersResult
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from math import fabs
 
 class MotorPIDController(Node):
@@ -31,10 +32,14 @@ class MotorPIDController(Node):
         self.Ki = self.get_parameter('Ki').value
         self.Kd = self.get_parameter('Kd').value
 
-        self.create_subscription(Float32, '/VelocityEncL', self.encoder_callback, 10)
-        self.create_subscription(Float32, '/ik_cmd_vel', self.setpoint_callback, 10)
+        qos_profile = QoSProfile(depth=10)
+        qos_profile.reliability = QoSReliabilityPolicy.BEST_EFFORT
+
+        self.create_subscription(Float32, '/VelocityEncL', self.encoder_callback, qos_profile)
+        self.create_subscription(Float32, '/iban_se_la_come', self.setpoint_callback, 10)
 
         self.pwm_pub = self.create_publisher(Float32, '/ControlL', 10)
+        self.vel_filt_pub = self.create_publisher(Float32, '/VEL_ENC_BUENA_IBAN', 10)
 
         self.timer = self.create_timer(0.02, self.control_loop)  # 50 Hz
         self.add_on_set_parameters_callback(self.param_update_callback)
