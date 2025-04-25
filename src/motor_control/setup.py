@@ -42,7 +42,7 @@ setup(
             'escaneo_3d = motor_control.escaneo_3d_node:main',
             'square_path_ctrl = motor_control.square_path_ctrl:main', 
             'trajectory_controller = motor_control.trajectory_controller:main',
-            'trajectory_w_delays = motor_control.trajectory_w_delays:main',
+            'motor_low_level_ctrl = motor_control.motor_low_level_ctrl:main',
         ],
     },
 )
