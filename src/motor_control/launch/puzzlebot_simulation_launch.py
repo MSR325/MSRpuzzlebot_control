@@ -1,5 +1,10 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch_ros.actions import Node
+from launch.actions import IncludeLaunchDescription
+import os
+from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     left_motor_node = Node(
@@ -133,6 +138,17 @@ def generate_launch_description():
         output='screen'
     )
 
+    display_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory('msr_simulation'),
+                'launch',
+                'display.launch.py'
+            )
+        )
+    )
+
+
     return LaunchDescription([
         left_motor_node,
         left_ctrl_node,
@@ -140,5 +156,6 @@ def generate_launch_description():
         right_ctrl_node,
         odom_node,
         inverse_kinematics_node,
-        cmd_mux_node
+        cmd_mux_node, 
+        display_launch
     ])
