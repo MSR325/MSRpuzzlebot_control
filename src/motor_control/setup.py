@@ -41,6 +41,8 @@ setup(
             'teleop_twist_keyboard = motor_control.teleop_twist_keyboard:main',
             'escaneo_3d = motor_control.escaneo_3d_node:main',
             'square_path_ctrl = motor_control.square_path_ctrl:main', 
+            'trajectory_controller = motor_control.trajectory_controller:main',
+            'motor_low_level_ctrl = motor_control.motor_low_level_ctrl:main',
             'cubic_control = motor_control.cubic_control:main',
             'path_generator = motor_control.path_generator:main',
             'left_motor_controller = motor_control.left_motor_controller:main',
