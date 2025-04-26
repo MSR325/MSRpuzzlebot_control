@@ -2,6 +2,7 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
+from launch.actions import ExecuteProcess
 from launch.actions import IncludeLaunchDescription
 import os
 from ament_index_python.packages import get_package_share_directory
@@ -148,6 +149,15 @@ def generate_launch_description():
         )
     )
 
+    teleop_terminal = ExecuteProcess(
+        cmd=[
+            'gnome-terminal',
+            '--',
+            'ros2', 'run', 'motor_control', 'teleop_twist_keyboard'
+        ],
+        shell=False
+    )
+
 
     return LaunchDescription([
         left_motor_node,
@@ -157,5 +167,6 @@ def generate_launch_description():
         odom_node,
         inverse_kinematics_node,
         cmd_mux_node, 
-        display_launch
+        display_launch,
+        teleop_terminal
     ])
