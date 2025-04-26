@@ -8,14 +8,15 @@ from std_msgs.msg import Float32
 from rcl_interfaces.msg import SetParametersResult
 from geometry_msgs.msg import Twist
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
+from sensor_msgs.msg import JointState
 
 class OdometryNode(Node):
     def __init__(self):
         super().__init__('simulation_odometry_node')
         # Declarar parámetros
-        self.declare_parameter('wheel_radius', 0.05)       # [m]
+        self.declare_parameter('wheel_radius', 0.01)       # [m]
         self.declare_parameter('wheel_separation', 0.19)    # [m]173
-        self.declare_parameter('sample_time', 0.018)         # [s]
+        self.declare_parameter('sample_time', 0.005)         # [s]
         # Parámetro para el ruido (sigma²)
         self.declare_parameter('sigma_squared', 0.1)
 
@@ -37,9 +38,10 @@ class OdometryNode(Node):
         # Matriz de covarianza del estado [x, y, theta]
         self.Sig = np.zeros((3, 3))
         
-        # Velocidades de las ruedas
-        # self.left_speed = 0.0
-        # self.right_speed = 0.0
+        # Posiciones de las ruedas
+        self.left_wheel_pos = 0.0  # [rad]
+        self.right_wheel_pos = 0.0  # [rad]
+
 
         # Crear un perfil de QoS con BEST_EFFORT para las suscripciones a los encoders
         qos_profile = QoSProfile(depth=10)
@@ -65,6 +67,8 @@ class OdometryNode(Node):
         # Callback para actualización dinámica de parámetros
         self.add_on_set_parameters_callback(self.parameter_callback)
         
+        self.joint_state_pub = self.create_publisher(JointState, 'joint_states', 10)
+
         self.get_logger().info("Odometry Node Started")
 
     def teleop_vel_sub_callback(self, msg: Twist):
@@ -106,8 +110,6 @@ class OdometryNode(Node):
         odom_msg.twist.twist.linear.x = self.V_forward
         odom_msg.twist.twist.angular.z = self.omega
 
-        self.odom_pub.publish(odom_msg)
-
         # Publish global velocity if needed
         gx_msg = Float32()
         gx_msg.data = global_vel_x
@@ -116,6 +118,24 @@ class OdometryNode(Node):
         gy_msg = Float32()
         gy_msg.data = global_vel_y
         self.global_vel_y_pub.publish(gy_msg)
+
+        # Compute wheel rotation based on robot linear/angular velocity
+        v_l = self.V_forward - (self.wheel_separation / 2.0) * self.omega
+        v_r = self.V_forward - (self.wheel_separation / 2.0) * self.omega
+
+        # Integrate to get wheel positions
+        self.left_wheel_pos += (v_l / self.wheel_radius) * dt
+        self.right_wheel_pos += (v_r / self.wheel_radius) * dt
+
+        joint_state = JointState()
+        joint_state.header.stamp = self.get_clock().now().to_msg()
+        joint_state.name = ['left_wheel_joint', 'right_wheel_joint']
+        joint_state.position = [self.left_wheel_pos, self.right_wheel_pos]
+
+        self.odom_pub.publish(odom_msg)
+        self.joint_state_pub.publish(joint_state)
+
+
 
         
     def parameter_callback(self, params):

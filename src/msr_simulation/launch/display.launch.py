@@ -19,11 +19,11 @@ def generate_launch_description():
             name='robot_state_publisher',
             parameters=[{'robot_description': urdf_content}]
         ),
-        Node(
-            package='joint_state_publisher',
-            executable='joint_state_publisher',
-            name='joint_state_publisher'
-        ),
+        # Node(
+        #     package='joint_state_publisher',
+        #     executable='joint_state_publisher',
+        #     name='joint_state_publisher'
+        # ),
         Node(
             package='msr_simulation',
             executable='odom_tf_broadcaster',
