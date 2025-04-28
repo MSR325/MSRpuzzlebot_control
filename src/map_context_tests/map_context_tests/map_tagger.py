@@ -382,7 +382,7 @@ class MapTagger(Node):
             label.id = 1000 + i
             label.type = Marker.TEXT_VIEW_FACING
             label.action = Marker.ADD
-            label.scale.z = 0.4
+            label.scale.z = 0.2
             label.color.r = label.color.g = label.color.b = 1.0
             label.color.a = 1.0
             label.pose.position.x = sum(pt.x for pt in pts) / len(pts)
@@ -410,7 +410,7 @@ class MapTagger(Node):
             label.id = 2000 + i  # avoid collision with room labels (1000 + i)
             label.type = Marker.TEXT_VIEW_FACING
             label.action = Marker.ADD
-            label.scale.z = 0.4
+            label.scale.z = 0.2
             label.color.r = label.color.g = label.color.b = 1.0
             label.color.a = 1.0
             label.pose.position.x = avg_x
