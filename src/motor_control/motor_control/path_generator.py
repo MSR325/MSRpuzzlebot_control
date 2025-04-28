@@ -6,6 +6,7 @@ from rcl_interfaces.srv import GetParameters, SetParameters
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.parameter import Parameter as RclpyParameter
 import json, math, sys
+from tf_transformations import euler_from_quaternion
 
 class PathGenerator(Node):
     def __init__(self):
@@ -30,12 +31,20 @@ class PathGenerator(Node):
         self.set_param_cli = self.create_client(SetParameters, '/inverse_kinematics/set_parameters')
 
         self.arrival_tolerance = 0.1
+        self.yaw_tolerance = 0.05 
+
+
+        self.delay_after_arrival = 1.0  # seconds you want to wait
+        self.pause_timer = None
+        self.waiting_after_arrival = False
+
 
         # Esperar conexión a servicios
         if not self.get_param_cli.wait_for_service(timeout_sec=2.0):
             self.get_logger().warn("No pude conectar al servicio get_parameters de inverse_kinematics")
         else:
             self.arrival_tolerance = self._fetch_arrival_tolerance(self.arrival_tolerance)
+            self.yaw_tolerance = self._fetch_heading_tolerance(self.yaw_tolerance)
 
         if not self.set_param_cli.wait_for_service(timeout_sec=2.0):
             self.get_logger().error("No pude conectar al servicio set_parameters de inverse_kinematics")
@@ -53,6 +62,15 @@ class PathGenerator(Node):
 
     def odom_callback(self, msg: Odometry):
         self.current_pose = msg.pose.pose.position
+        orientation_q = msg.pose.pose.orientation
+        quaternion = (
+            orientation_q.x,
+            orientation_q.y,
+            orientation_q.z,
+            orientation_q.w
+        )
+        _, _, yaw = euler_from_quaternion(quaternion)
+        self.current_yaw = yaw
 
     def timer_callback(self):
         if self.first_timer_run:
@@ -62,16 +80,49 @@ class PathGenerator(Node):
         if self.current_pose is None or self.current_index >= len(self.waypoints):
             return
 
+        if self.waiting_after_arrival:
+            return
+
         wp = self.waypoints[self.current_index]
         dx = wp['x'] - self.current_pose.x
         dy = wp['y'] - self.current_pose.y
-        if math.hypot(dx, dy) < self.arrival_tolerance:
+
+        position_reached = math.hypot(dx, dy) < self.arrival_tolerance
+
+        # Default: assume no yaw checking if yaw not defined
+        yaw_reached = True
+
+        if 'yaw' in wp:
+            desired_yaw = wp['yaw']
+            yaw_error = self._angle_diff(desired_yaw, self.current_yaw)
+            yaw_reached = abs(yaw_error) < self.yaw_tolerance
+
+        if position_reached and yaw_reached:
             self.get_logger().info(f"Llegado a waypoint {self.current_index}")
+
             self.current_index += 1
             if self.current_index < len(self.waypoints):
-                self._set_next_waypoint()
+                self.waiting_after_arrival = True
+                self.pause_timer = self.create_timer(self.delay_after_arrival, self._resume_after_pause)
             else:
                 self.get_logger().info("Todos los waypoints completados 🚩")
+
+    def _angle_diff(self, target, current):
+        """
+        Returns the smallest difference between two angles, in radians.
+        """
+        a = target - current
+        a = (a + math.pi) % (2 * math.pi) - math.pi
+        return a
+
+
+    def _resume_after_pause(self):
+        self.pause_timer.cancel()
+        self.pause_timer = None
+        self.waiting_after_arrival = False
+
+        self._set_next_waypoint()
+
 
     def dynamic_reconfigure_callback(self, params):
         results = []
@@ -114,7 +165,7 @@ class PathGenerator(Node):
             self.get_logger().error("waypoints_json no es ni string ni lista. Ignorando.")
             return []
 
-    def _fetch_arrival_tolerance(self, default):
+    def _fetch_arrival_tolerance(self, default):    
         req = GetParameters.Request()
         req.names = ['position_threshold']
         future = self.get_param_cli.call_async(req)
@@ -125,6 +176,19 @@ class PathGenerator(Node):
             return val
         self.get_logger().warn(f"No pude leer position_threshold; usando {default}")
         return default
+    
+    def _fetch_heading_tolerance(self, default):
+        req = GetParameters.Request()
+        req.names = ['heading_threshold']
+        future = self.get_param_cli.call_async(req)
+        rclpy.spin_until_future_complete(self, future)
+        if future.result() and future.result().values:
+            val = future.result().values[0].double_value
+            self.get_logger().info(f"Usando heading_threshold={val:.3f} como yaw_tolerance")
+            return val
+        self.get_logger().warn(f"No pude leer heading_threshold; usando {default}")
+        return default
+
 
     def _set_next_waypoint(self):
         if self.current_index >= len(self.waypoints):
@@ -132,10 +196,17 @@ class PathGenerator(Node):
             return
 
         wp = self.waypoints[self.current_index]
+
         params = [
             RclpyParameter('desired_x', RclpyParameter.Type.DOUBLE, wp['x']).to_parameter_msg(),
-            RclpyParameter('desired_y', RclpyParameter.Type.DOUBLE, wp['y']).to_parameter_msg(),
+            RclpyParameter('desired_y', RclpyParameter.Type.DOUBLE, wp['y']).to_parameter_msg()
         ]
+
+        if 'yaw' in wp:
+            params.append(
+                RclpyParameter('desired_yaw', RclpyParameter.Type.DOUBLE, wp['yaw']).to_parameter_msg()
+            )
+
         req = SetParameters.Request()
         req.parameters = params
         future = self.set_param_cli.call_async(req)
@@ -143,13 +214,14 @@ class PathGenerator(Node):
         def on_result(fut):
             try:
                 if fut.result():
-                    self.get_logger().info(f"Waypoint {self.current_index} enviado → x={wp['x']}, y={wp['y']}")
+                    self.get_logger().info(f"Waypoint {self.current_index} enviado → x={wp['x']}, y={wp['y']}, yaw={wp.get('yaw', 'None')}")
                 else:
                     self.get_logger().error("Fallo al setear parámetros en inverse_kinematics")
             except Exception as e:
                 self.get_logger().error(f"Excepción al setear parámetros: {e}")
 
         future.add_done_callback(on_result)
+
 
 
 def main(args=None):
