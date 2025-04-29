@@ -63,7 +63,7 @@ To view an example map:
 
 ## 📝 Notes
 
-- The order of the 2D goal poses **must be selected counter clockwise**, or the side with color will be looking "down" (idk why)  
+- The order of the 2D goal poses **must be selected counter-clockwise**, or the side with color will be looking "down" (idk why)  
 - if it breaks, restart / relaunch
 
 ---

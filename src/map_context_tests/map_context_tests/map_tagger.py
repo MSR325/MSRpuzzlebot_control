@@ -37,7 +37,7 @@ EXAMPLE:
  select option 6 and write "home_example5" to view an example
 
 Notes: 
-- The order of the 2D goal poses must be selected counter clockwise, or the side with color will be looking "down" (idk why)  
+- The order of the 2D goal poses must be selected counter-clockwise, or the side with color will be looking "down" (idk why)  
 - if it breaks, restart / relaunch 
 
 Pending tasks:
@@ -135,8 +135,7 @@ class MapTagger(Node):
         except ValueError:
             selection = 0
 
-        self.state = selection
-        print(f"🧭  Current state: {self.state}")       
+        self.state = selection       
 
 
         if (self.state == self.STATE_ENTRANCE):
@@ -173,10 +172,12 @@ class MapTagger(Node):
             self.select_global_path_to_edit()
             
         elif (self.state == self.STATE_DONE):
+            print(f"🔢  Active thread count: {threading.active_count()}")
             self.get_logger().info("✅  Tagging complete.")
             ######################## EXIT PROGRAM ########################
             self.destroy_node()
             rclpy.get_default_context().shutdown()  # Use this safe form
+            return
         else: 
             print(f"🔢  Active thread count: {threading.active_count()}")
             # for t in threading.enumerate():
@@ -184,6 +185,8 @@ class MapTagger(Node):
             self.state = self.STATE_WAIT
             self.get_logger().info("⏸️  Waiting... (state 0)")
             threading.Thread(target=self.prompt_state, daemon=True).start()   
+
+        print(f"🧭  Current state: {self.state}")
 
     def select_global_path_to_edit(self):
         if not self.map.global_paths:
@@ -474,66 +477,6 @@ class MapTagger(Node):
                 paths.markers.append(marker)
                 path_id += 1
 
-            # === Global Path ===
-            global_paths.markers.clear()
-
-            for i, gp in enumerate(self.map.global_paths):
-                if len(gp.path) < 2:
-                    continue  # Need at least 2 points to draw a surface
-
-                marker = Marker()
-                marker.header.frame_id = "map"
-                marker.header.stamp = self.get_clock().now().to_msg()
-                marker.ns = f"global_path_{gp.name}"
-                marker.id = i
-                marker.type = Marker.TRIANGLE_LIST
-                marker.action = Marker.ADD
-                marker.scale.x = 1.0
-                marker.scale.y = 1.0
-                marker.scale.z = 1.0
-                marker.color.r = 1.0
-                marker.color.g = 1.0
-                marker.color.b = 0.0
-                marker.color.a = 1.0
-                marker.pose.orientation.w = 1.0
-
-                width = 0.7  # Width of the "road" in meters
-                z_elevation = 0.0  # Small lift from ground
-
-                for j in range(len(gp.path) - 1):
-                    p1 = gp.path[j]
-                    p2 = gp.path[j+1]
-
-                    # Calculate the perpendicular vector (normal) to the segment (p2 - p1)
-                    dx = p2.x - p1.x
-                    dy = p2.y - p1.y
-                    length = (dx**2 + dy**2)**0.5
-                    if length == 0:
-                        continue  # skip degenerate segments
-
-                    # Unit normal vector to the left (90 degrees rotation)
-                    nx = -dy / length
-                    ny = dx / length
-
-                    # Offset points to the left and right
-                    p1_left  = Point(x=p1.x + nx * width/2, y=p1.y + ny * width/2, z=z_elevation)
-                    p1_right = Point(x=p1.x - nx * width/2, y=p1.y - ny * width/2, z=z_elevation)
-                    p2_left  = Point(x=p2.x + nx * width/2, y=p2.y + ny * width/2, z=z_elevation)
-                    p2_right = Point(x=p2.x - nx * width/2, y=p2.y - ny * width/2, z=z_elevation)
-
-                    # Form two triangles (quad made of two triangles)
-                    marker.points.append(p1_left)
-                    marker.points.append(p1_right)
-                    marker.points.append(p2_left)
-
-                    marker.points.append(p2_left)
-                    marker.points.append(p1_right)
-                    marker.points.append(p2_right)
-
-                global_paths.markers.append(marker)
-
-
-
             # === Objects of Interest ===
             for obj in room.obj_int:
                 if len(obj.obj_area) < 3:
@@ -592,6 +535,64 @@ class MapTagger(Node):
 
                 objects.markers.append(marker)
                 obj_id += 1
+
+        # === Global Path ===
+        global_paths.markers.clear()
+
+        for i, gp in enumerate(self.map.global_paths):
+            if len(gp.path) < 2:
+                continue  # Need at least 2 points to draw a surface
+
+            marker = Marker()
+            marker.header.frame_id = "map"
+            marker.header.stamp = self.get_clock().now().to_msg()
+            marker.ns = f"global_path_{gp.name}"
+            marker.id = i
+            marker.type = Marker.TRIANGLE_LIST
+            marker.action = Marker.ADD
+            marker.scale.x = 1.0
+            marker.scale.y = 1.0
+            marker.scale.z = 1.0
+            marker.color.r = 1.0
+            marker.color.g = 1.0
+            marker.color.b = 0.0
+            marker.color.a = 1.0
+            marker.pose.orientation.w = 1.0
+
+            width = 0.7  # Width of the "road" in meters
+            z_elevation = 0.0  # Small lift from ground
+
+            for j in range(len(gp.path) - 1):
+                p1 = gp.path[j]
+                p2 = gp.path[j+1]
+
+                # Calculate the perpendicular vector (normal) to the segment (p2 - p1)
+                dx = p2.x - p1.x
+                dy = p2.y - p1.y
+                length = (dx**2 + dy**2)**0.5
+                if length == 0:
+                    continue  # skip degenerate segments
+
+                # Unit normal vector to the left (90 degrees rotation)
+                nx = -dy / length
+                ny = dx / length
+
+                # Offset points to the left and right
+                p1_left  = Point(x=p1.x + nx * width/2, y=p1.y + ny * width/2, z=z_elevation)
+                p1_right = Point(x=p1.x - nx * width/2, y=p1.y - ny * width/2, z=z_elevation)
+                p2_left  = Point(x=p2.x + nx * width/2, y=p2.y + ny * width/2, z=z_elevation)
+                p2_right = Point(x=p2.x - nx * width/2, y=p2.y - ny * width/2, z=z_elevation)
+
+                # Form two triangles (quad made of two triangles)
+                marker.points.append(p1_left)
+                marker.points.append(p1_right)
+                marker.points.append(p2_left)
+
+                marker.points.append(p2_left)
+                marker.points.append(p1_right)
+                marker.points.append(p2_right)
+
+            global_paths.markers.append(marker)
 
         self.entrance_pub.publish(entrances)
         self.path_pub.publish(paths)

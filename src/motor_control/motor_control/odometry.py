@@ -8,6 +8,7 @@ from std_msgs.msg import Float32
 from rcl_interfaces.msg import SetParametersResult
 from geometry_msgs.msg import Twist
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
+from sensor_msgs.msg import JointState
 
 class OdometryNode(Node):
     def __init__(self):
@@ -53,6 +54,14 @@ class OdometryNode(Node):
         self.global_vel_x_pub = self.create_publisher(Float32, 'global_velocity_x', 10)
         self.global_vel_y_pub = self.create_publisher(Float32, 'global_velocity_y', 10)
         
+        # Publisher for joint states
+        self.joint_state_pub = self.create_publisher(JointState, 'joint_states', 10)
+
+        # Initialize wheel positions (radians)
+        self.left_wheel_pos = 0.0
+        self.right_wheel_pos = 0.0
+
+
         # Timer para integración
         self.timer = self.create_timer(self.sample_time, self.timer_callback)
         
@@ -78,6 +87,14 @@ class OdometryNode(Node):
         V = (R / 2.0) * (self.left_speed + self.right_speed)
         omega = (R / L) * (self.right_speed - self.left_speed)
         
+        # Compute local wheel velocities
+        v_l = V - (self.wheel_separation / 2.0) * omega
+        v_r = V + (self.wheel_separation / 2.0) * omega
+
+        # Integrate wheel positions from velocities
+        self.left_wheel_pos += (v_l / self.wheel_radius) * dt
+        self.right_wheel_pos += (v_r / self.wheel_radius) * dt
+
         # Integrar para obtener la pose (usando integración simple)
         self.x += V * math.cos(self.theta) * dt
         self.y += V * math.sin(self.theta) * dt
@@ -126,6 +143,14 @@ class OdometryNode(Node):
         odom_msg.twist.twist.angular.z = omega
 
         self.odom_pub.publish(odom_msg)
+
+        joint_state = JointState()
+        joint_state.header.stamp = self.get_clock().now().to_msg()
+        joint_state.name = ['left_wheel_joint', 'right_wheel_joint']
+        joint_state.position = [self.left_wheel_pos, self.right_wheel_pos]
+
+        self.joint_state_pub.publish(joint_state)
+
 
         gx_msg = Float32()
         gx_msg.data = global_vel_x
