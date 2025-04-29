@@ -153,14 +153,14 @@ class InverseKinematics(Node):
         omega_d = pid_ori
 
         # Saturar velocidad lineal a ±0.23 m/s
-        V_d = saturate(V_d, -0.23, 0.23)
+        V_d = saturate(V_d, -0.15, 0.15)
 
         # Garantizar mínimo angular de ±0.3 rad/s si hay comando pequeño
         if abs(omega_d) > 1e-4 and abs(omega_d) < 0.3:
             omega_d = 0.3 * (1 if omega_d > 0 else -1)
 
         # Saturar velocidad angular a ±1.2 rad/s
-        omega_d = saturate(omega_d, -1.2, 1.2)
+        omega_d = saturate(omega_d, -0.8, 0.8)
 
         # Cálculo de setpoints de ruedas
         left_setpoint  = (V_d - (self.wheel_separation / 2.0) * omega_d) / self.wheel_radius
