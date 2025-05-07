@@ -6,7 +6,7 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     pkg_share = get_package_share_directory('msr_simulation')
     urdf_path = os.path.join(pkg_share, 'urdf', 'puzzlebot.urdf.xacro')
-    rviz_path = os.path.join(pkg_share, 'rviz', 'display.rviz')
+    rviz_path = os.path.join(pkg_share, 'rviz', 'msr_map.rviz')
 
     # Read URDF as a string safely
     with open(urdf_path, 'r') as urdf_file:

@@ -19,6 +19,7 @@ setup(
         (os.path.join('share', package_name, 'meshes'), glob('meshes/*')),
         (os.path.join('share', package_name, 'worlds'), glob('worlds/*')),
         (os.path.join('share', package_name, 'rviz'), glob('rviz/*')),
+        (os.path.join('share', package_name, 'run'), glob('run/*')),
         (os.path.join('share', package_name, 'models/puzzlebot'), glob('models/puzzlebot/*')),
     ],
     install_requires=['setuptools'],
@@ -32,6 +33,7 @@ setup(
         'console_scripts': [
             'odom_tf_broadcaster = msr_simulation.odom_tf_broadcaster:main',
             'simulation_odometry = msr_simulation.simulation_odometry:main',
+            'trajectory_commander = msr_simulation.trajectory_commander:main',
         ],
     },
 
