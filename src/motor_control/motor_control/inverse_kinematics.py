@@ -2,7 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, String
 import math
 from rcl_interfaces.msg import SetParametersResult
 import transforms3d as tfe
@@ -42,6 +42,9 @@ class InverseKinematics(Node):
         # Deadzones internas
         self.orientation_deadzone = 0.02
         self.position_deadzone = 0.02
+        self.lin_vel_mag_saturation = 0.15
+        self.ang_vel_mag_saturation = 0.8
+        self.color_flag_multiplier = 1.0
 
         # Carga de parámetros
         self.wheel_radius      = self.get_parameter('wheel_radius').value
@@ -70,9 +73,8 @@ class InverseKinematics(Node):
         self.prev_error_ori     = 0.0
 
         # Subscripciones y publicaciones
-        self.current_pose_sub = self.create_subscription(
-            Odometry, 'odom', self.current_pose_callback, 10
-        )
+        self.current_pose_sub = self.create_subscription(Odometry, 'odom', self.current_pose_callback, 10)
+        self.color_flag_sub = self.create_subscription(String, '/color_flag', self.color_flag_callback, 10)
         
         self.left_setpoint_pub  = self.create_publisher(Float32, 'left/set_point', 10)
         self.right_setpoint_pub = self.create_publisher(Float32, 'right/set_point', 10)
@@ -87,6 +89,14 @@ class InverseKinematics(Node):
 
     def current_pose_callback(self, msg: Odometry):
         self.current_pose = msg
+    
+    def color_flag_callback(self, msg: String):
+        if msg.data == "red":
+            self.color_flag_multiplier = 0.0
+        elif msg.data == "yellow":
+            self.color_flag_multiplier = 0.5
+        elif msg.data == "green":
+            self.color_flag_multiplier = 1.0
 
     def timer_callback(self):
         if self.current_pose is None:
@@ -153,14 +163,15 @@ class InverseKinematics(Node):
         omega_d = pid_ori
 
         # Saturar velocidad lineal a ±0.23 m/s
-        V_d = saturate(V_d, -0.15, 0.15)
-
+        V_d = saturate(V_d, -self.lin_vel_mag_saturation, self.lin_vel_mag_saturation)
+        V_d = V_d * self.color_flag_multiplier
         # Garantizar mínimo angular de ±0.3 rad/s si hay comando pequeño
         if abs(omega_d) > 1e-4 and abs(omega_d) < 0.3:
             omega_d = 0.3 * (1 if omega_d > 0 else -1)
 
         # Saturar velocidad angular a ±1.2 rad/s
-        omega_d = saturate(omega_d, -0.8, 0.8)
+        omega_d = saturate(omega_d, -self.ang_vel_mag_saturation, self.ang_vel_mag_saturation)
+        omega_d = omega_d * self.color_flag_multiplier
 
         # Cálculo de setpoints de ruedas
         left_setpoint  = (V_d - (self.wheel_separation / 2.0) * omega_d) / self.wheel_radius
