@@ -42,8 +42,8 @@ class InverseKinematics(Node):
         # Deadzones internas
         self.orientation_deadzone = 0.02
         self.position_deadzone = 0.02
-        self.lin_vel_mag_saturation = 0.15
-        self.ang_vel_mag_saturation = 0.8
+        self.lin_vel_mag_saturation = 0.5
+        self.ang_vel_mag_saturation = 1.8
         self.color_flag_multiplier = 1.0
 
         # Carga de parámetros
@@ -93,10 +93,13 @@ class InverseKinematics(Node):
     def color_flag_callback(self, msg: String):
         if msg.data == "red":
             self.color_flag_multiplier = 0.0
+            self.get_logger().info("ROJOOOOOOOOOOOOOOOOOOOOO")
         elif msg.data == "yellow":
             self.color_flag_multiplier = 0.5
+            self.get_logger().info("YELLOW")
         elif msg.data == "green":
             self.color_flag_multiplier = 1.0
+            self.get_logger().info("avanza pendejo")
 
     def timer_callback(self):
         if self.current_pose is None:
