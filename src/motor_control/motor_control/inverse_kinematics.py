@@ -99,7 +99,7 @@ class InverseKinematics(Node):
             self.get_logger().info("YELLOW")
         elif msg.data == "green":
             self.color_flag_multiplier = 1.0
-            self.get_logger().info("avanza pendejo")
+            self.get_logger().info("Avanzaaaaaaa ")
 
     def timer_callback(self):
         if self.current_pose is None:
