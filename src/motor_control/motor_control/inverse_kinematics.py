@@ -74,7 +74,7 @@ class InverseKinematics(Node):
 
         # Subscripciones y publicaciones
         self.current_pose_sub = self.create_subscription(Odometry, 'odom', self.current_pose_callback, 10)
-        self.color_flag_sub = self.create_subscription(String, '/color_flag', self.color_flag_callback, 10)
+        self.color_flag_sub = self.create_subscription(Float32, '/fsm_action', self.color_flag_callback, 10)
         
         self.left_setpoint_pub  = self.create_publisher(Float32, 'left/set_point', 10)
         self.right_setpoint_pub = self.create_publisher(Float32, 'right/set_point', 10)
@@ -90,17 +90,10 @@ class InverseKinematics(Node):
     def current_pose_callback(self, msg: Odometry):
         self.current_pose = msg
     
-    def color_flag_callback(self, msg: String):
-        if msg.data == "red":
-            self.color_flag_multiplier = 0.0
-            self.get_logger().info("ROJOOOOOOOOOOOOOOOOOOOOO")
-        elif msg.data == "yellow":
-            self.color_flag_multiplier = 0.5
-            self.get_logger().info("YELLOW")
-        elif msg.data == "green":
-            self.color_flag_multiplier = 1.0
-            self.get_logger().info("Avanzaaaaaaa ")
-
+    def color_flag_callback(self, msg: Float32):
+        self.get_logger().info(f"Received multiplier: {msg.data}")
+        self.color_flag_multiplier = msg.data
+        
     def timer_callback(self):
         if self.current_pose is None:
             return
