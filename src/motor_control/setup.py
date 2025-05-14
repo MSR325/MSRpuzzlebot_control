@@ -47,6 +47,8 @@ setup(
             'path_generator = motor_control.path_generator:main',
             'left_motor_controller = motor_control.left_motor_controller:main',
             'right_motor_controller = motor_control.right_motor_controller:main',
+            'detection_fsm = motor_control.detection_fsm:main',
+            
         ],
     },
 )

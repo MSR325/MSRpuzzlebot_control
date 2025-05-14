@@ -42,8 +42,8 @@ class InverseKinematics(Node):
         # Deadzones internas
         self.orientation_deadzone = 0.02
         self.position_deadzone = 0.02
-        self.lin_vel_mag_saturation = 0.5
-        self.ang_vel_mag_saturation = 1.8
+        self.lin_vel_mag_saturation = 0.15
+        self.ang_vel_mag_saturation = 0.8
         self.color_flag_multiplier = 1.0
 
         # Carga de parámetros
@@ -91,7 +91,7 @@ class InverseKinematics(Node):
         self.current_pose = msg
     
     def color_flag_callback(self, msg: Float32):
-        self.get_logger().info(f"Received multiplier: {msg.data}")
+        # self.get_logger().info(f"Received multiplier: {msg.data}")
         self.color_flag_multiplier = msg.data
         
     def timer_callback(self):
