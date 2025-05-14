@@ -139,6 +139,14 @@ def generate_launch_description():
         output='screen'
     )
 
+    fsm_detection = Node(
+        name='detection_fsm',
+        package='motor_control',
+        executable='detection_fsm',
+        emulate_tty=True,
+        output='screen'
+    )
+
     cmd_mux_node = Node(
         name='cmd_vel_mux',
         package='motor_control',
