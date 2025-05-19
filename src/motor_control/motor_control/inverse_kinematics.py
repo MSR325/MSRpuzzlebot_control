@@ -42,8 +42,8 @@ class InverseKinematics(Node):
         # Deadzones internas
         self.orientation_deadzone = 0.02
         self.position_deadzone = 0.02
-        self.lin_vel_mag_saturation = 0.15
-        self.ang_vel_mag_saturation = 0.8
+        self.lin_vel_mag_saturation = 0.5
+        self.ang_vel_mag_saturation = 3.0
         self.color_flag_multiplier = 1.0
 
         # Carga de parámetros
