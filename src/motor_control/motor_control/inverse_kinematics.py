@@ -39,10 +39,6 @@ class InverseKinematics(Node):
         self.declare_parameter('desired_y', 0.0)
         self.declare_parameter('desired_yaw', 0.0)
 
-        # Aceleraciones Maximas (ramp up) 
-        self.declare_parameter('max_linear_accel', 0.5)   # m/s^2
-        self.declare_parameter('max_angular_accel', 1.5)  # rad/s^2
-
         # Deadzones internas
         self.orientation_deadzone = 0.02
         self.position_deadzone = 0.02
@@ -70,18 +66,11 @@ class InverseKinematics(Node):
         self.desired_y   = self.get_parameter('desired_y').value
         self.desired_yaw = self.get_parameter('desired_yaw').value
 
-        self.max_linear_accel  = self.get_parameter('max_linear_accel').value
-        self.max_angular_accel = self.get_parameter('max_angular_accel').value
-
         # Variables internas de PID
         self.integral_error_pos = 0.0
         self.prev_error_pos     = 0.0
         self.integral_error_ori = 0.0
         self.prev_error_ori     = 0.0
-
-        # Variables internas para ramp acceleration
-        self.prev_linear_vel  = 0.0
-        self.prev_angular_vel = 0.0
 
         # Subscripciones y publicaciones
         self.current_pose_sub = self.create_subscription(Odometry, 'odom', self.current_pose_callback, 10)
@@ -163,37 +152,22 @@ class InverseKinematics(Node):
             pid_ori = 0.0
             self.integral_error_ori = 0.0
 
-
         if err_d < self.position_deadzone:
             V_d = 0.0
             self.integral_error_pos = 0.0
 
-        if err_d < self.position_deadzone and abs(error_heading) < self.orientation_deadzone:
-            self.prev_linear_vel = 0.0
-            self.prev_angular_vel = 0.0
-
         omega_d = pid_ori
 
-        # 1. Ramp
-        V_d = self.ramp_velocity(self.prev_linear_vel, V_d, dt, self.max_linear_accel)
-        omega_d = self.ramp_velocity(self.prev_angular_vel, omega_d, dt, self.max_angular_accel)
-
-        # 2. Guardar históricos
-        self.prev_linear_vel = V_d
-        self.prev_angular_vel = omega_d
-
-        # 3. Aplicar multiplicador (si es necesario)
-        V_d *= self.color_flag_multiplier
-        omega_d *= self.color_flag_multiplier
-
-        # 4. Asegurar mínimo angular (si aplica)
+        # Saturar velocidad lineal a ±0.23 m/s
+        V_d = saturate(V_d, -self.lin_vel_mag_saturation, self.lin_vel_mag_saturation)
+        V_d = V_d * self.color_flag_multiplier
+        # Garantizar mínimo angular de ±0.3 rad/s si hay comando pequeño
         if abs(omega_d) > 1e-4 and abs(omega_d) < 0.3:
             omega_d = 0.3 * (1 if omega_d > 0 else -1)
 
-        # 5. Saturación final (garantiza seguridad del hardware)
-        V_d = saturate(V_d, -self.lin_vel_mag_saturation, self.lin_vel_mag_saturation)
+        # Saturar velocidad angular a ±1.2 rad/s
         omega_d = saturate(omega_d, -self.ang_vel_mag_saturation, self.ang_vel_mag_saturation)
-      
+        omega_d = omega_d * self.color_flag_multiplier
 
         # Cálculo de setpoints de ruedas
         left_setpoint  = (V_d - (self.wheel_separation / 2.0) * omega_d) / self.wheel_radius
@@ -216,13 +190,6 @@ class InverseKinematics(Node):
 
     def normalize_angle(self, angle):
         return math.atan2(math.sin(angle), math.cos(angle))
-    
-    def ramp_velocity(self, current, target, dt, max_accel):
-        delta = target - current
-        max_delta = max_accel * dt
-        delta = saturate(delta, -max_delta, max_delta)
-        return current + delta
-
 
     def parameter_callback(self, params):
         for param in params:
@@ -260,11 +227,6 @@ class InverseKinematics(Node):
                 self.desired_y = val
             elif name == 'desired_yaw':
                 self.desired_yaw = val
-            elif name == 'max_linear_accel':
-                self.max_linear_accel = val
-            elif name == 'max_angular_accel':
-                self.max_angular_accel = val
-
 
         return SetParametersResult(successful=True)
 
