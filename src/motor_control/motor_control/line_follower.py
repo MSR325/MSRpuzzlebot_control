@@ -4,6 +4,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist
+from std_msgs.msg import Float32
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
@@ -15,8 +16,12 @@ class LineFollower(Node):
         self.bridge = CvBridge()
         self.subscription = self.create_subscription(
             Image, '/image_raw', self.image_callback, 10)
+        self.color_flag_sub = self.create_subscription(
+            Float32, '/fms_detection', self.color_flag_callback, 10)  
         self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
         self.get_logger().info('Line Follower Node Started')
+
+        self.color_flag_multiplier = 1.0
 
         # Create control window and trackbars
         # cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
@@ -34,9 +39,9 @@ class LineFollower(Node):
         # y_start = int(height * 0.0)
         y_end   = height
         # horizontal bounds (central 50% of width)
-        x_start = int(width * 0.25)
+        x_start = int(width * 0.1)
         # x_start = int(width * 0.0)
-        x_end   = int(width * 0.75)
+        x_end   = int(width * 0.9)
         # x_end   = int(width)
 
         # extract centered ROI
@@ -128,6 +133,8 @@ class LineFollower(Node):
         twist.linear.x = linear_x
         twist.angular.z = ang_z
         self.get_logger().warning(f'Publishing: linear_x={linear_x}, angular_z={ang_z}')
+        twist.linear.x *= self.color_flag_multiplier
+        twist.angular.z *= self.color_flag_multiplier
         self.publisher.publish(twist)
 
         # Overlay: draw detected and center lines
@@ -143,6 +150,10 @@ class LineFollower(Node):
         cv2.imshow('Overlay', overlay)
         cv2.waitKey(1)
 
+    def color_flag_callback(self, msg):
+        # Get the color flag from the message
+        self.color_flag_multiplier = msg.data
+        
 
 def main(args=None):
     rclpy.init(args=args)
