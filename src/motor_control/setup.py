@@ -47,10 +47,9 @@ setup(
             'path_generator = motor_control.path_generator:main',
             'left_motor_controller = motor_control.left_motor_controller:main',
             'right_motor_controller = motor_control.right_motor_controller:main',
+            'line_follower = motor_control.line_follower:main',     
             'detection_fsm = motor_control.detection_fsm:main',
             'teleop_twist_joy = motor_control.teleop_twist_joy:main', 
-
-            
         ],
     },
 )
