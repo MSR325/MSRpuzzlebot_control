@@ -277,7 +277,7 @@ Trajectory Commander - Menu:
 
     def toggle_cmd_source(self):
         mode = input("Enter mode (ik/teleop): ").strip()
-        if mode not in ['ik', 'teleop']:
+        if mode not in ['ik', 'teleop', 'line']:
             print("Invalid mode.")
             return
 

@@ -11,7 +11,7 @@ class CmdVelMux(Node):
         # Subscripciones a los topics de los distintos publicadores
         self.teleop_sub = self.create_subscription(Twist, 'teleop_cmd_vel', self.teleop_callback, 10)
         self.ik_sub = self.create_subscription(Twist, 'ik_cmd_vel', self.ik_callback, 10)
-        self.pseudo_sub = self.create_subscription(Twist, 'pseudo_cmd_vel', self.pseudo_callback, 10)
+        self.line_sub = self.create_subscription(Twist, 'line_cmd_vel', self.line_callback, 10)
 
         # Publicadores unificados
         self.cmd_vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
@@ -24,13 +24,13 @@ class CmdVelMux(Node):
         # Últimos mensajes recibidos por fuente
         self.last_teleop_msg = Twist()
         self.last_ik_msg = Twist()
-        self.last_pseudo_msg = Twist()
+        self.last_line_msg = Twist()
 
         # Ramp acceleration
         self.prev_linear = 0.0
         self.prev_angular = 0.0
-        self.max_linear_accel = 0.5     # m/s^2
-        self.max_angular_accel = 1.5    # rad/s^2
+        self.max_linear_accel = 0.2     # m/s^2
+        self.max_angular_accel = 0.5    # rad/s^2
         self.sample_time = 0.018        # s
 
         # Temporizador de publicación
@@ -44,18 +44,18 @@ class CmdVelMux(Node):
     def ik_callback(self, msg: Twist):
         self.last_ik_msg = msg
 
-    def pseudo_callback(self, msg: Twist):
-        self.last_pseudo_msg = msg
+    def line_callback(self, msg: Twist):
+        self.last_line_msg = msg
 
     def switch_callback(self, request, response):
-        if request.active_source in ['teleop', 'ik', 'pseudo']:
+        if request.active_source in ['teleop', 'ik', 'line']:
             self.active_source = request.active_source
             response.success = True
             response.message = f"Active source changed to {self.active_source}"
             self.get_logger().info(response.message)
         else:
             response.success = False
-            response.message = "Invalid source. Valid options: 'teleop', 'ik', 'pseudo'."
+            response.message = "Invalid source. Valid options: 'teleop', 'ik', 'line'."
             self.get_logger().warn(response.message)
         return response
 
@@ -71,8 +71,8 @@ class CmdVelMux(Node):
             msg = self.last_teleop_msg
         elif self.active_source == 'ik':
             msg = self.last_ik_msg
-        elif self.active_source == 'pseudo':
-            msg = self.last_pseudo_msg
+        elif self.active_source == 'line':
+            msg = self.last_line_msg
 
         # Aplicar ramping a velocidades
         linear = self.ramp_velocity(self.prev_linear, msg.linear.x, self.sample_time, self.max_linear_accel)
