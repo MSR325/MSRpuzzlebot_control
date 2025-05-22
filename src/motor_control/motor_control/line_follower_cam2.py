@@ -24,10 +24,10 @@ class LineFollower(Node):
         self.color_flag_multiplier = 1.0
 
         # Create control window and trackbars
-        # cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
-        # cv2.createTrackbar('Threshold', 'Controls', 144, 255, lambda x: None)
-        # cv2.createTrackbar('Blur Kernel', 'Controls', 3, 31, lambda x: None)
-        # cv2.createTrackbar('Morph Kernel', 'Controls', 0, 31, lambda x: None)
+        cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
+        cv2.createTrackbar('Threshold', 'Controls', 144, 255, lambda x: None)
+        cv2.createTrackbar('Blur Kernel', 'Controls', 3, 31, lambda x: None)
+        cv2.createTrackbar('Morph Kernel', 'Controls', 0, 31, lambda x: None)
 
     def image_callback(self, msg):
         # Convert ROS image to OpenCV BGR
@@ -35,13 +35,13 @@ class LineFollower(Node):
         height, width, _ = frame.shape
 
         # vertical bounds (bottom third)
-        y_start = int(height * 3/4)
+        y_start = int(height * 4/5)
         # y_start = int(height * 0.0)
         y_end   = height
         # horizontal bounds (central 50% of width)
-        x_start = int(width * 0.1)
+        x_start = int(width * 0.2)
         # x_start = int(width * 0.0)
-        x_end   = int(width * 0.9)
+        x_end   = int(width * 0.8)
         # x_end   = int(width)
 
         # extract centered ROI
@@ -49,12 +49,12 @@ class LineFollower(Node):
 
 
         # Read trackbar positions
-        thresh_val = 144
-        blur_k = 3
-        morph_k = 0
-        # thresh_val = cv2.getTrackbarPos('Threshold', 'Controls')
-        # blur_k = cv2.getTrackbarPos('Blur Kernel', 'Controls')
-        # morph_k = cv2.getTrackbarPos('Morph Kernel', 'Controls')
+        # thresh_val = 110
+        # blur_k = 3
+        # morph_k = 0
+        thresh_val = cv2.getTrackbarPos('Threshold', 'Controls')
+        blur_k = cv2.getTrackbarPos('Blur Kernel', 'Controls')
+        morph_k = cv2.getTrackbarPos('Morph Kernel', 'Controls')
 
         # Ensure odd values for kernels
         blur_k = blur_k if blur_k % 2 == 1 else blur_k + 1
@@ -83,24 +83,13 @@ class LineFollower(Node):
             twist = Twist()
             twist.linear.x = -0.05  # Reverse speed
             twist.angular.z = 0.0
-            self.publisher.publish(twist)
-            time.sleep(0.5)  # Wait for 0.5 seconds
+            # self.publisher.publish(twist)
+            # time.sleep(0.5)  # Wait for 0.5 seconds
             # rclpy.spin_once(self, timeout_sec=1.0)  # Wait for 1 second
             return
 
         # Detect the peak white line
         line_x = int(np.argmax(histogram))  # Find the column with the highest intensity
-
-        # # Detect top-3 peaks for parallel lines
-        # if len(histogram) >= 3:
-        #     # indices of three largest values
-        #     peak_idxs = np.argpartition(histogram, -3)[-3:]
-        #     peaks = np.sort(peak_idxs)
-        #     # Use middle peak as reference
-        #     line_x = int(peaks[1])
-        # else:
-        #     # fallback to single line
-        #     line_x = int(np.argmax(histogram))
 
         # Compute offset from center
         center_x = (x_end - x_start) // 2
@@ -109,24 +98,14 @@ class LineFollower(Node):
         self.get_logger().info(f'Offset: {offset}')
 
         # Proportional controller for angular velocity
-        Kp = 0.005
+        Kp = 0.008
         ang_z = -Kp * float(offset)
         # Deadband to avoid jitter
         if abs(offset) < 15:
             ang_z = 0.0
-            linear_x = 0.15
+            linear_x = 0.1
         else:
-            linear_x = 0.08
-
-        # Add limits to linear and angular velocities
-        # MAX_LINEAR_VELOCITY = 0.2  # Maximum linear velocity
-        # MIN_LINEAR_VELOCITY = -0.2  # Minimum linear velocity
-        # MAX_ANGULAR_VELOCITY = 0.5  # Maximum angular velocity
-        # MIN_ANGULAR_VELOCITY = -0.5  # Minimum angular velocity
-
-        # Clamp velocities
-        # linear_x = max(MIN_LINEAR_VELOCITY, min(MAX_LINEAR_VELOCITY, linear_x))
-        # ang_z = max(MIN_ANGULAR_VELOCITY, min(MAX_ANGULAR_VELOCITY, ang_z))
+            linear_x = 0.05
 
         # Publish command
         twist = Twist()
@@ -135,7 +114,7 @@ class LineFollower(Node):
         self.get_logger().warning(f'Publishing: linear_x={linear_x}, angular_z={ang_z}')
         twist.linear.x *= self.color_flag_multiplier
         twist.angular.z *= self.color_flag_multiplier
-        self.publisher.publish(twist)
+        # self.publisher.publish(twist)
 
         # Overlay: draw detected and center lines
         overlay = roi.copy()
