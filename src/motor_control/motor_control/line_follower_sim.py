@@ -15,19 +15,17 @@ class LineFollower(Node):
         super().__init__('line_follower')
         self.bridge = CvBridge()
         self.subscription = self.create_subscription(
-            Image, '/image_raw', self.image_callback, 10)
-        self.color_flag_sub = self.create_subscription(
-            Float32, '/fms_detection', self.color_flag_callback, 10)  
+            Image, '/Image', self.image_callback, 10)
         self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
         self.get_logger().info('Line Follower Node Started')
 
         self.color_flag_multiplier = 1.0
 
         # Create control window and trackbars
-        # cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
-        # cv2.createTrackbar('Threshold', 'Controls', 144, 255, lambda x: None)
-        # cv2.createTrackbar('Blur Kernel', 'Controls', 3, 31, lambda x: None)
-        # cv2.createTrackbar('Morph Kernel', 'Controls', 0, 31, lambda x: None)
+        cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
+        cv2.createTrackbar('Threshold', 'Controls', 144, 255, lambda x: None)
+        cv2.createTrackbar('Blur Kernel', 'Controls', 3, 31, lambda x: None)
+        cv2.createTrackbar('Morph Kernel', 'Controls', 0, 31, lambda x: None)
 
     def image_callback(self, msg):
         # Convert ROS image to OpenCV BGR
@@ -39,9 +37,9 @@ class LineFollower(Node):
         # y_start = int(height * 0.0)
         y_end   = height
         # horizontal bounds (central 50% of width)
-        x_start = int(width * 0.1)
+        x_start = int(width * 0.25)
         # x_start = int(width * 0.0)
-        x_end   = int(width * 0.9)
+        x_end   = int(width * 0.75)
         # x_end   = int(width)
 
         # extract centered ROI
@@ -49,12 +47,12 @@ class LineFollower(Node):
 
 
         # Read trackbar positions
-        thresh_val = 144
-        blur_k = 3
-        morph_k = 0
-        # thresh_val = cv2.getTrackbarPos('Threshold', 'Controls')
-        # blur_k = cv2.getTrackbarPos('Blur Kernel', 'Controls')
-        # morph_k = cv2.getTrackbarPos('Morph Kernel', 'Controls')
+        # thresh_val = 144
+        # blur_k = 3
+        # morph_k = 0
+        thresh_val = cv2.getTrackbarPos('Threshold', 'Controls')
+        blur_k = cv2.getTrackbarPos('Blur Kernel', 'Controls')
+        morph_k = cv2.getTrackbarPos('Morph Kernel', 'Controls')
 
         # Ensure odd values for kernels
         blur_k = blur_k if blur_k % 2 == 1 else blur_k + 1
@@ -83,8 +81,8 @@ class LineFollower(Node):
             twist = Twist()
             twist.linear.x = -0.05  # Reverse speed
             twist.angular.z = 0.0
-            self.publisher.publish(twist)
-            time.sleep(0.5)  # Wait for 0.5 seconds
+            # self.publisher.publish(twist)
+            # time.sleep(0.5)  # Wait for 0.5 seconds
             # rclpy.spin_once(self, timeout_sec=1.0)  # Wait for 1 second
             return
 
@@ -135,7 +133,7 @@ class LineFollower(Node):
         self.get_logger().warning(f'Publishing: linear_x={linear_x}, angular_z={ang_z}')
         twist.linear.x *= self.color_flag_multiplier
         twist.angular.z *= self.color_flag_multiplier
-        self.publisher.publish(twist)
+        # self.publisher.publish(twist)
 
         # Overlay: draw detected and center lines
         overlay = roi.copy()

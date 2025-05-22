@@ -49,6 +49,7 @@ setup(
             'right_motor_controller = motor_control.right_motor_controller:main',
             'line_follower = motor_control.line_follower:main',
             'line_follower_cam2 = motor_control.line_follower_cam2:main',
+            'line_follower_sim = motor_control.line_follower_sim:main',
             'detection_fsm = motor_control.detection_fsm:main',
             'teleop_twist_joy = motor_control.teleop_twist_joy:main', 
         ],
