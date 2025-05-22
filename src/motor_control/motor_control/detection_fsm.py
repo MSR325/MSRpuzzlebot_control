@@ -1,7 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
-from std_msgs.msg import Float32
+from std_msgs.msg import String, Float32
 from rcl_interfaces.msg import SetParametersResult
 
 from enum import Enum
