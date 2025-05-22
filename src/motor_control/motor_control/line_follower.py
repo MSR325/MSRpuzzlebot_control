@@ -3,15 +3,16 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
+from std_msgs.msg import Float32, String
 from geometry_msgs.msg import Twist
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
 import time
 
-class LineFollower(Node):
+class LineFollowerCentroid(Node):
     def __init__(self):
-        super().__init__('line_follower')
+        super().__init__('line_follower_centroid')
         self.bridge = CvBridge()
         self.subscription = self.create_subscription(
             Image, '/image_raw', self.image_callback, 10)
@@ -19,10 +20,13 @@ class LineFollower(Node):
         self.get_logger().info('Line Follower Node Started')
 
         # Create control window and trackbars
-        # cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
-        # cv2.createTrackbar('Threshold', 'Controls', 95, 255, lambda x: None)
-        # cv2.createTrackbar('Blur Kernel', 'Controls', 0, 31, lambda x: None)
-        # cv2.createTrackbar('Morph Kernel', 'Controls', 0, 31, lambda x: None)
+        cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
+        cv2.createTrackbar('Threshold', 'Controls', 95, 255, lambda x: None)
+        cv2.createTrackbar('Blur Kernel', 'Controls', 0, 31, lambda x: None)
+        cv2.createTrackbar('Morph Kernel', 'Controls', 0, 31, lambda x: None)
+        self.color_flag_multiplier = 1.0
+        self.create_subscription(Float32, '/fsm_action', self.fsm_action_callback, 10)
+
 
     def image_callback(self, msg):
         # Convert ROS image to OpenCV BGR
@@ -113,6 +117,10 @@ class LineFollower(Node):
         else:
             linear_x = 0.08
 
+        # Apply color multiplier from /fsm_action
+        linear_x *= self.color_flag_multiplier
+        ang_z *= self.color_flag_multiplier
+
         # Add limits to linear and angular velocities
         # MAX_LINEAR_VELOCITY = 0.2  # Maximum linear velocity
         # MIN_LINEAR_VELOCITY = -0.2  # Minimum linear velocity
@@ -127,6 +135,7 @@ class LineFollower(Node):
         twist = Twist()
         twist.linear.x = linear_x
         twist.angular.z = ang_z
+
         self.get_logger().warning(f'Publishing: linear_x={linear_x}, angular_z={ang_z}')
         self.publisher.publish(twist)
 
@@ -143,10 +152,14 @@ class LineFollower(Node):
         cv2.imshow('Overlay', overlay)
         cv2.waitKey(1)
 
+    def fsm_action_callback(self, msg: Float32):
+        self.color_flag_multiplier = msg.data
+        self.get_logger().info(f"Updated color_flag_multiplier to: {self.color_flag_multiplier}")
+
 
 def main(args=None):
     rclpy.init(args=args)
-    node = LineFollower()
+    node = LineFollowerCentroid()
     try:
         rclpy.spin(node)
     finally:
