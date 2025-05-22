@@ -23,7 +23,7 @@ class LineFollower(Node):
 
         # Create control window and trackbars
         cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
-        cv2.createTrackbar('Threshold', 'Controls', 144, 255, lambda x: None)
+        cv2.createTrackbar('Threshold', 'Controls', 146, 255, lambda x: None)
         cv2.createTrackbar('Blur Kernel', 'Controls', 3, 31, lambda x: None)
         cv2.createTrackbar('Morph Kernel', 'Controls', 0, 31, lambda x: None)
 
@@ -33,7 +33,7 @@ class LineFollower(Node):
         height, width, _ = frame.shape
 
         # vertical bounds (bottom third)
-        y_start = int(height * 3/4)
+        y_start = int(height * 5/6)
         # y_start = int(height * 0.0)
         y_end   = height
         # horizontal bounds (central 50% of width)
@@ -47,7 +47,7 @@ class LineFollower(Node):
 
 
         # Read trackbar positions
-        # thresh_val = 144
+        # thresh_val = 146
         # blur_k = 3
         # morph_k = 0
         thresh_val = cv2.getTrackbarPos('Threshold', 'Controls')
@@ -81,8 +81,8 @@ class LineFollower(Node):
             twist = Twist()
             twist.linear.x = -0.05  # Reverse speed
             twist.angular.z = 0.0
-            # self.publisher.publish(twist)
-            # time.sleep(0.5)  # Wait for 0.5 seconds
+            self.publisher.publish(twist)
+            time.sleep(0.5)  # Wait for 0.5 seconds
             # rclpy.spin_once(self, timeout_sec=1.0)  # Wait for 1 second
             return
 
@@ -107,14 +107,14 @@ class LineFollower(Node):
         self.get_logger().info(f'Offset: {offset}')
 
         # Proportional controller for angular velocity
-        Kp = 0.005
+        Kp = 0.08
         ang_z = -Kp * float(offset)
         # Deadband to avoid jitter
-        if abs(offset) < 15:
+        if abs(offset) < 20:
             ang_z = 0.0
-            linear_x = 0.15
+            linear_x = 0.07
         else:
-            linear_x = 0.08
+            linear_x = 0.07
 
         # Add limits to linear and angular velocities
         # MAX_LINEAR_VELOCITY = 0.2  # Maximum linear velocity
@@ -133,7 +133,7 @@ class LineFollower(Node):
         self.get_logger().warning(f'Publishing: linear_x={linear_x}, angular_z={ang_z}')
         twist.linear.x *= self.color_flag_multiplier
         twist.angular.z *= self.color_flag_multiplier
-        # self.publisher.publish(twist)
+        self.publisher.publish(twist)
 
         # Overlay: draw detected and center lines
         overlay = roi.copy()
