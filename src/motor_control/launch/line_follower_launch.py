@@ -21,7 +21,16 @@ def generate_launch_description():
         output='screen',
     )
 
+    # cmd_vel_mux = Node(
+    #     name='cmd_vel_mux',
+    #     package='motor_control',
+    #     executable='cmd_vel_mux',
+    #     emulate_tty=True,
+    #     output='screen',
+    # )
+
     return LaunchDescription([
         detection_fsm,
         line_follower,
+        # cmd_vel_mux,
     ])

@@ -83,8 +83,8 @@ class LineFollower(Node):
             twist = Twist()
             twist.linear.x = -0.05  # Reverse speed
             twist.angular.z = 0.0
-            # self.publisher.publish(twist)
-            # time.sleep(0.5)  # Wait for 0.5 seconds
+            self.publisher.publish(twist)
+            time.sleep(0.5)  # Wait for 0.5 seconds
             # rclpy.spin_once(self, timeout_sec=1.0)  # Wait for 1 second
             return
 
@@ -109,12 +109,10 @@ class LineFollower(Node):
 
         # Publish command
         twist = Twist()
-        twist.linear.x = linear_x
-        twist.angular.z = ang_z
+        twist.linear.x = linear_x * self.color_flag_multiplier
+        twist.angular.z = ang_z * self.color_flag_multiplier
         self.get_logger().warning(f'Publishing: linear_x={linear_x}, angular_z={ang_z}')
-        twist.linear.x *= self.color_flag_multiplier
-        twist.angular.z *= self.color_flag_multiplier
-        # self.publisher.publish(twist)
+        self.publisher.publish(twist)
 
         # Overlay: draw detected and center lines
         overlay = roi.copy()
