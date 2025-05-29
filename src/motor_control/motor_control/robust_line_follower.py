@@ -3,7 +3,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, String
 from geometry_msgs.msg import Twist
 from cv_bridge import CvBridge
 import cv2
@@ -14,42 +14,40 @@ class LineFollowerCentroid(Node):
     def __init__(self):
         super().__init__('line_follower_centroid')
         self.bridge = CvBridge()
+
         self.subscription = self.create_subscription(
             Image, '/image_raw', self.image_callback, 10)
-        self.color_flag_sub = self.create_subscription(
-            Float32, '/fms_detection', self.color_flag_callback, 10)  
+        
         self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
         self.get_logger().info('Line Follower Node Started')
-
-        self.color_flag_multiplier = 1.0
 
         # Create control window and trackbars
         cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
         cv2.createTrackbar('Threshold', 'Controls', 95, 255, lambda x: None)
         cv2.createTrackbar('Blur Kernel', 'Controls', 0, 31, lambda x: None)
         cv2.createTrackbar('Morph Kernel', 'Controls', 0, 31, lambda x: None)
+
         self.color_flag_multiplier = 1.0
         self.create_subscription(Float32, '/fsm_action', self.fsm_action_callback, 10)
-
 
     def image_callback(self, msg):
         # Convert ROS image to OpenCV BGR
         frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         height, width, _ = frame.shape
 
+        # Define ROI (bottom third, central 50% width)
         # vertical bounds (bottom third)
         y_start = int(height * 5/6)
         # y_start = int(height * 0.0)
         y_end   = height
         # horizontal bounds (central 50% of width)
-        x_start = int(width * 0.1)
+        x_start = int(width * 0.25)
         # x_start = int(width * 0.0)
-        x_end   = int(width * 0.9)
+        x_end   = int(width * 0.75)
         # x_end   = int(width)
 
         # extract centered ROI
         roi = frame[y_start:y_end, x_start:x_end]
-
 
         # Read trackbar positions
         thresh_val = 95
@@ -65,19 +63,60 @@ class LineFollowerCentroid(Node):
         morph_k = morph_k if morph_k % 2 == 1 else morph_k + 1
         morph_k = max(1, morph_k)
 
-        # Preprocessing: grayscale + blur
-        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.GaussianBlur(gray, (blur_k, blur_k), 0)
+        # Robust Preprocessing
 
-        # Binary inverse threshold for black line detection
-        _, binary = cv2.threshold(blurred, thresh_val, 255, cv2.THRESH_BINARY_INV)
+        # Convert to HSV and get V-channel
+        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV) # Resilience to uneven lighting and shadows
+        v_channel = hsv[:, :, 2]# The brightness (value) seprataes brightness from color content and is more stable
+
+        # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        # Normalization of contrast across the image before thresholding / Histogram equalization
+        # Balance of brightness and contrast for robustness in shadows and bright spots
+        # CLAHER divides the image into smaller parts or tiles and adjusts their local contrast to avoid getting the image too dark or too bright (over-saturation).
+        # This enhances line visibility in both bright and shadowed areas dynamically.
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        v_equalized = clahe.apply(v_channel)
+
+        # Dynamic Gamma Correction based on average brightness
+        # Adapts brightness dynamically on image non-linearly.
+        # Overexposure or underexposure is adapted without losing or clipping highlights
+        mean_val = np.mean(v_equalized)
+        if mean_val < 90:
+            gamma = 1.5
+        elif mean_val > 160:
+            gamma = 0.8
+        else:
+            gamma = 1.0
+
+        invGamma = 1.0 / gamma
+        table = np.array([(i / 255.0) ** invGamma * 255 for i in np.arange(256)]).astype("uint8")
+        v_corrected = cv2.LUT(v_equalized, table)
+
+        # Preprocessing: grayscale + histogram equalization + blur
+        # gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        
+        # Gaussian Blur
+        # Reduces noise and image detail while preserving its structure.
+        # Smoothens pixel noise from equalization and brightness variation
+
+        blurred = cv2.GaussianBlur(v_corrected, (blur_k, blur_k), 0)
+
+        # Adaptive binary inverse threshold for black line detection to manage changing lighting.
+        # No manual threshold tuning needed. 
+        # Local thresholds based on pixel tiles or sections are calculated to adapt to shadows, highlights, and lighting changes.
+        binary = cv2.adaptiveThreshold(
+            blurred, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+            cv2.THRESH_BINARY_INV,
+            11, 2
+        )
 
         # Morphological operations to remove noise
         kernel = np.ones((morph_k, morph_k), np.uint8)
         binary = cv2.dilate(binary, kernel, iterations=1)
         binary = cv2.erode(binary, kernel, iterations=1)
 
-        # Histogram across columns
+        # Histogram across image columns
         histogram = np.sum(binary, axis=0)
 
         # Check if no line is detected
@@ -141,8 +180,6 @@ class LineFollowerCentroid(Node):
         twist.angular.z = ang_z
 
         self.get_logger().warning(f'Publishing: linear_x={linear_x}, angular_z={ang_z}')
-        twist.linear.x *= self.color_flag_multiplier
-        twist.angular.z *= self.color_flag_multiplier
         self.publisher.publish(twist)
 
         # Overlay: draw detected and center lines
