@@ -3,7 +3,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float32, String
+from std_msgs.msg import Float32, Int16
 from geometry_msgs.msg import Twist
 from cv_bridge import CvBridge
 import cv2
@@ -14,19 +14,24 @@ class LineFollowerCentroid(Node):
     def __init__(self):
         super().__init__('line_follower_centroid')
         self.bridge = CvBridge()
-        self.subscription = self.create_subscription(
-            Image, '/image_raw', self.image_callback, 10)
-        self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.subscription = self.create_subscription(Image, '/image_raw', self.image_callback, 10)
+        self.activate_sub = self.create_subscription(Int16, '/line_follow_enable', self.activate_line_follow_callback, 10)
+        self.publisher = self.create_publisher(Twist, 'line_cmd_vel', 10)
         self.get_logger().info('Line Follower Node Started')
 
         # Create control window and trackbars
-        cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
-        cv2.createTrackbar('Threshold', 'Controls', 95, 255, lambda x: None)
-        cv2.createTrackbar('Blur Kernel', 'Controls', 0, 31, lambda x: None)
-        cv2.createTrackbar('Morph Kernel', 'Controls', 0, 31, lambda x: None)
+        # cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
+        # cv2.createTrackbar('Threshold', 'Controls', 95, 255, lambda x: None)
+        # cv2.createTrackbar('Blur Kernel', 'Controls', 0, 31, lambda x: None)
+        # cv2.createTrackbar('Morph Kernel', 'Controls', 0, 31, lambda x: None)
         self.color_flag_multiplier = 1.0
+        self.active_line = 0
+        self.windows_open = False
         self.create_subscription(Float32, '/fsm_action', self.fsm_action_callback, 10)
 
+    def activate_line_follow_callback(self, msg):
+        self.active_line = msg.data
+        self.get_logger().info(f"line follow node state: {self.active_line}")
 
     def image_callback(self, msg):
         # Convert ROS image to OpenCV BGR
@@ -82,7 +87,13 @@ class LineFollowerCentroid(Node):
             twist = Twist()
             twist.linear.x = -0.05  # Reverse speed
             twist.angular.z = 0.0
-            self.publisher.publish(twist)
+            if (self.active_line == 1):
+                self.publisher.publish(twist)
+            else:
+                twist.linear.x = 0.0  
+                twist.angular.z = 0.0
+                self.publisher.publish(twist)
+
             time.sleep(0.5)  # Wait for 0.5 seconds
             # rclpy.spin_once(self, timeout_sec=1.0)  # Wait for 1 second
             return
@@ -137,7 +148,12 @@ class LineFollowerCentroid(Node):
         twist.angular.z = ang_z
 
         self.get_logger().warning(f'Publishing: linear_x={linear_x}, angular_z={ang_z}')
-        self.publisher.publish(twist)
+        if (self.active_line == 1):
+            self.publisher.publish(twist)
+        else:
+            twist.linear.x = 0.0  
+            twist.angular.z = 0.0
+            self.publisher.publish(twist)
 
         # Overlay: draw detected and center lines
         overlay = roi.copy()
@@ -147,10 +163,17 @@ class LineFollowerCentroid(Node):
         cv2.line(overlay, (center_x, 0), (center_x, overlay.shape[0]), (0, 0, 255), 2)
 
         # Display windows
-        cv2.imshow('ROI', roi)
-        cv2.imshow('Binary Mask', binary)
-        cv2.imshow('Overlay', overlay)
-        cv2.waitKey(1)
+        if (self.active_line == 1):
+            cv2.imshow('ROI', roi)
+            cv2.imshow('Binary Mask', binary)
+            cv2.imshow('Overlay', overlay)
+            cv2.waitKey(1)
+            self.windows_open = True
+        elif self.windows_open:
+            cv2.destroyWindow('ROI')
+            cv2.destroyWindow('Binary Mask')
+            cv2.destroyWindow('Overlay')
+            self.windows_open = False
 
     def fsm_action_callback(self, msg: Float32):
         self.color_flag_multiplier = msg.data

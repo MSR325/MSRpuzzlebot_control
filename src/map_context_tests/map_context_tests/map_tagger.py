@@ -27,21 +27,21 @@ TO USE:
  
  Launch "map_tagger.launch.py" launch file (it will load the rviz config file and 
     open terminal with the menu) 
-    
-    ros2 launch map_context_tests map_tagger.launch.py
 
  or run "map_tagger.py" and launch rviz separately
+
+ if it breaks, restart / relaunch 
 
 
 EXAMPLE:
  select option 6 and write "home_example5" to view an example
 
 Notes: 
-- The order of the 2D goal poses must be selected counter-clockwise, or the side with color will be looking "down" (idk why)  
-- if it breaks, restart / relaunch 
+- The order of the 2D goal poses must be selected counter clockwise, or the side with color will be looking "down" (idk why)  
 
 Pending tasks:
 - FRIDA Specific Pose saver
+- Editing any room/global_path (you can currently only add features to the last added room/global_path)
 - Not all possibilities go back to the "promt_state" menu, it still breaks sometimesa
 - Maybe calculate dimensions of rooms/objects
 - fix note
@@ -62,7 +62,6 @@ import threading
 import colorsys
 import yaml
 import os
-from pathlib import Path
 
 
 class MapTagger(Node):
@@ -97,8 +96,6 @@ class MapTagger(Node):
         self.label_pub = self.create_publisher(MarkerArray, "room_labels", 10)
         self.map_pub = self.create_publisher(MapContext, "tagged_map", 10)
         
-        self.data_dir = "src/msr_simulation/data/maps"
-        
         # RVIZ visualization MarkerArray topic publishers
         self.marker_pub = self.create_publisher(MarkerArray, "room_marker", 10)
         self.entrance_pub = self.create_publisher(MarkerArray, 'room_entrances_markers', 10)
@@ -125,8 +122,8 @@ class MapTagger(Node):
         print("5. Save current map to YAML")
         print("6. Load map from YAML")
         print("7. Add global hallway/external path")
-        print("8. State currrent room number to edit")
-        print("9. Edit specific global path")
+        print("8. State currrent room number")
+        print("9. State currrent global path number")
         print("0. Do nothing / wait")
         print("-1. Exit")
 
@@ -135,7 +132,8 @@ class MapTagger(Node):
         except ValueError:
             selection = 0
 
-        self.state = selection       
+        self.state = selection
+        print(f"🧭  Current state: {self.state}")       
 
 
         if (self.state == self.STATE_ENTRANCE):
@@ -165,19 +163,15 @@ class MapTagger(Node):
                 self.global_path_point_count = 1
             print(f"🌐 Select {self.global_path_point_count} point(s) for the {self.current_global_path_name} global path")
             self.map.global_paths.append(global_path)
-            self.CURRENT_GLOBAL_PATH = -1
         elif self.state == self.STATE_SELECT_ROOM:
             self.select_room_to_edit()
         elif self.state == self.STATE_SELECT_GLOBAL_PATH:
             self.select_global_path_to_edit()
-            
         elif (self.state == self.STATE_DONE):
-            print(f"🔢  Active thread count: {threading.active_count()}")
             self.get_logger().info("✅  Tagging complete.")
             ######################## EXIT PROGRAM ########################
             self.destroy_node()
             rclpy.get_default_context().shutdown()  # Use this safe form
-            return
         else: 
             print(f"🔢  Active thread count: {threading.active_count()}")
             # for t in threading.enumerate():
@@ -185,8 +179,6 @@ class MapTagger(Node):
             self.state = self.STATE_WAIT
             self.get_logger().info("⏸️  Waiting... (state 0)")
             threading.Thread(target=self.prompt_state, daemon=True).start()   
-
-        print(f"🧭  Current state: {self.state}")
 
     def select_global_path_to_edit(self):
         if not self.map.global_paths:
@@ -201,17 +193,14 @@ class MapTagger(Node):
         try:
             index = int(input("Enter the index of the global path to edit: "))
             if 0 <= index < len(self.map.global_paths):
-                self.CURRENT_GLOBAL_PATH = index
-                self.global_path_point_count = int(input("How many points to add to this global path? "))
-                print(f"✅ Editing global path: '{self.map.global_paths[index].name}', select {self.global_path_point_count} new point(s)")
-                self.state = self.STATE_GLOBAL_PATH  # reuse global path logic
+                self.current_global_path_index = index
+                print(f"✅ Current global path: '{self.map.global_paths[index].name}'")
             else:
                 print("❌ Invalid index.")
-                threading.Thread(target=self.prompt_state, daemon=True).start()
         except ValueError:
             print("❌ Invalid input.")
-            threading.Thread(target=self.prompt_state, daemon=True).start()
-
+        
+        threading.Thread(target=self.prompt_state, daemon=True).start()
     
 
     def select_room_to_edit(self):
@@ -352,7 +341,7 @@ class MapTagger(Node):
     def publish_all_markers(self):
         marker_array = MarkerArray()
         label_array = MarkerArray()
-        z_offset = 0.0
+        z_offset = 0.05
 
         for i, room in enumerate(self.map.rooms):
             marker = Marker()
@@ -385,7 +374,7 @@ class MapTagger(Node):
             label.id = 1000 + i
             label.type = Marker.TEXT_VIEW_FACING
             label.action = Marker.ADD
-            label.scale.z = 0.2
+            label.scale.z = 0.4
             label.color.r = label.color.g = label.color.b = 1.0
             label.color.a = 1.0
             label.pose.position.x = sum(pt.x for pt in pts) / len(pts)
@@ -413,7 +402,7 @@ class MapTagger(Node):
             label.id = 2000 + i  # avoid collision with room labels (1000 + i)
             label.type = Marker.TEXT_VIEW_FACING
             label.action = Marker.ADD
-            label.scale.z = 0.2
+            label.scale.z = 0.4
             label.color.r = label.color.g = label.color.b = 1.0
             label.color.a = 1.0
             label.pose.position.x = avg_x
@@ -477,6 +466,31 @@ class MapTagger(Node):
                 paths.markers.append(marker)
                 path_id += 1
 
+            # === Global Path ===
+            global_paths.markers.clear()
+
+            for i, gp in enumerate(self.map.global_paths):
+                if len(gp.path) < 2:
+                    continue  # Need at least 2 points to draw a line
+
+                marker = Marker()
+                marker.header.frame_id = "map"
+                marker.header.stamp = self.get_clock().now().to_msg()
+                marker.ns = f"global_path_{gp.name}"
+                marker.id = i
+                marker.type = Marker.LINE_STRIP
+                marker.action = Marker.ADD
+                marker.scale.x = 0.7
+                marker.color.r = 1.0
+                marker.color.g = 1.0
+                marker.color.b = 0.0
+                marker.color.a = 1.0
+                marker.pose.orientation.w = 1.0
+                marker.points = [Point(x=p.x, y=p.y, z=0.05) for p in gp.path]
+
+                global_paths.markers.append(marker)
+
+
             # === Objects of Interest ===
             for obj in room.obj_int:
                 if len(obj.obj_area) < 3:
@@ -536,64 +550,6 @@ class MapTagger(Node):
                 objects.markers.append(marker)
                 obj_id += 1
 
-        # === Global Path ===
-        global_paths.markers.clear()
-
-        for i, gp in enumerate(self.map.global_paths):
-            if len(gp.path) < 2:
-                continue  # Need at least 2 points to draw a surface
-
-            marker = Marker()
-            marker.header.frame_id = "map"
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.ns = f"global_path_{gp.name}"
-            marker.id = i
-            marker.type = Marker.TRIANGLE_LIST
-            marker.action = Marker.ADD
-            marker.scale.x = 1.0
-            marker.scale.y = 1.0
-            marker.scale.z = 1.0
-            marker.color.r = 1.0
-            marker.color.g = 1.0
-            marker.color.b = 0.0
-            marker.color.a = 1.0
-            marker.pose.orientation.w = 1.0
-
-            width = 0.7  # Width of the "road" in meters
-            z_elevation = 0.0  # Small lift from ground
-
-            for j in range(len(gp.path) - 1):
-                p1 = gp.path[j]
-                p2 = gp.path[j+1]
-
-                # Calculate the perpendicular vector (normal) to the segment (p2 - p1)
-                dx = p2.x - p1.x
-                dy = p2.y - p1.y
-                length = (dx**2 + dy**2)**0.5
-                if length == 0:
-                    continue  # skip degenerate segments
-
-                # Unit normal vector to the left (90 degrees rotation)
-                nx = -dy / length
-                ny = dx / length
-
-                # Offset points to the left and right
-                p1_left  = Point(x=p1.x + nx * width/2, y=p1.y + ny * width/2, z=z_elevation)
-                p1_right = Point(x=p1.x - nx * width/2, y=p1.y - ny * width/2, z=z_elevation)
-                p2_left  = Point(x=p2.x + nx * width/2, y=p2.y + ny * width/2, z=z_elevation)
-                p2_right = Point(x=p2.x - nx * width/2, y=p2.y - ny * width/2, z=z_elevation)
-
-                # Form two triangles (quad made of two triangles)
-                marker.points.append(p1_left)
-                marker.points.append(p1_right)
-                marker.points.append(p2_left)
-
-                marker.points.append(p2_left)
-                marker.points.append(p1_right)
-                marker.points.append(p2_right)
-
-            global_paths.markers.append(marker)
-
         self.entrance_pub.publish(entrances)
         self.path_pub.publish(paths)
         self.global_path_pub.publish(global_paths)
@@ -610,8 +566,8 @@ class MapTagger(Node):
         r, g, b = colorsys.hsv_to_rgb(hue, 0.75, 1.0)
         return r, g, b
 
-    def save_map_to_yaml(self, map_msg, filename="map_output.yaml"):
-        directory = self.data_dir
+    def save_map_to_yaml(self, map_msg, filename="map_output.yaml", directory="src/map_context_tests/data"):
+        # Ensure the directory exists
         os.makedirs(directory, exist_ok=True)
 
         if not filename.endswith(".yaml"):
@@ -661,8 +617,8 @@ class MapTagger(Node):
         if not filename.endswith(".yaml"):
             filename += ".yaml"
 
-        # package_path = get_package_directory('map_context_tests')
-        full_path = os.path.join(self.data_dir, filename)
+        package_path = get_package_share_directory('map_context_tests')
+        full_path = os.path.join(package_path, 'data', filename)
 
         if not os.path.exists(full_path):
             print(f"❌ File '{full_path}' not found.")

@@ -139,7 +139,7 @@ def generate_launch_description():
         output='screen'
     )
 
-    fsm_detection = Node(
+    detection_fsm_node = Node(
         name='detection_fsm',
         package='motor_control',
         executable='detection_fsm',
@@ -151,6 +151,14 @@ def generate_launch_description():
         name='cmd_vel_mux',
         package='motor_control',
         executable='cmd_vel_mux',
+        emulate_tty=True,
+        output='screen'
+    )
+
+    line_follow_node = Node(
+        name='line_follow_node',
+        package='motor_control',
+        executable='line_follower',
         emulate_tty=True,
         output='screen'
     )
@@ -196,6 +204,8 @@ def generate_launch_description():
         inverse_kinematics_node,
         cmd_mux_node, 
         display_launch,
+        detection_fsm_node,
+        line_follow_node,
         open_tmux_terminals,
         path_generator_node,
         static_tf_pub_node,

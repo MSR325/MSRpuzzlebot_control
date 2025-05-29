@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, Point
+from std_msgs.msg import Int16
 from visualization_msgs.msg import MarkerArray, Marker
 from rcl_interfaces.srv import SetParameters
 from custom_interfaces.srv import SwitchPublisher
@@ -24,6 +25,8 @@ class TrajectoryCommander(Node):
 
         self.create_subscription(PoseStamped, '/goal_pose', self.goal_callback, 10)
         self.marker_pub = self.create_publisher(MarkerArray, '/trajectory_markers', 10)
+        self.line_follow_pub = self.create_publisher(Int16, '/line_follow_enable', 10)
+        self.detection_fsm_pub = self.create_publisher(Int16, '/detection_fsm_enable', 10)
 
         self.set_param_cli = self.create_client(SetParameters, '/inverse_kinematics/set_parameters')
         self.switch_cmd_cli = self.create_client(SwitchPublisher, '/switch_cmd_source')
@@ -31,6 +34,12 @@ class TrajectoryCommander(Node):
         # Wait for services
         self.set_param_cli.wait_for_service(timeout_sec=5.0)
         self.switch_cmd_cli.wait_for_service(timeout_sec=5.0)
+
+        self.detection_fsm_msg = Int16()
+        self.detection_fsm_msg.data = 0
+
+        self.line_follow_msg = Int16()
+        self.line_follow_msg.data = 0
 
     def goal_callback(self, msg: PoseStamped):
         orientation_q = msg.pose.orientation
@@ -58,10 +67,12 @@ class TrajectoryCommander(Node):
         while rclpy.ok():
             print("""
 Trajectory Commander - Menu:
-1. Send next goal pose to robot
-2. Save trajectory
-3. Send specific trajectory
-4. Toggle IK/Teleop
+1. Send next goal pose to robot 🎯
+2. Save trajectory 💾
+3. Send specific trajectory 🔄
+4. Toggle IK/Teleop/Line 🎮
+5. Toggle Line Following Mode 🛣️
+6. Toggle Semaphore Detection FSM 🚦
 -1. Exit
 """)
             choice = input("Enter your choice: ")
@@ -73,6 +84,11 @@ Trajectory Commander - Menu:
                 self.send_specific_trajectory()
             elif choice == '4':
                 self.toggle_cmd_source()
+            elif choice == '5':
+                self.toggle_line_following()
+            elif choice == '6':
+                self.toggle_detection_fsm()
+
             elif choice == '-1':
                 print("Exiting...")
                 break
@@ -272,11 +288,50 @@ Trajectory Commander - Menu:
             self.marker_pub.publish(markers)
             print("Trajectory markers published to RViz ✅")
 
+    def toggle_line_following(self):
+        print("Toggling line follower...")
 
+        if self.line_follow_msg.data == 1:
+            # Deactivate
+            self.line_follow_msg.data = 0
+            self.line_follow_pub.publish(self.line_follow_msg)
+            print("🛑 Line follower deactivated")
+        else:
+            # Step 1: Switch command source to 'line'
+            req = SwitchPublisher.Request()
+            req.active_source = 'line'
+            future = self.switch_cmd_cli.call_async(req)
+            while not future.done() and rclpy.ok():
+                rclpy.spin_once(self, timeout_sec=0.1)
+
+            try:
+                result = future.result()
+                print("✅ Switched command source to 'line'")
+            except Exception as e:
+                print(f"❌ Failed to switch to 'line': {e}")
+                return
+
+            # Step 2: Activate line follower
+            self.line_follow_msg.data = 1
+            self.line_follow_pub.publish(self.line_follow_msg)
+            print("✅ Line follower activated")
+
+    def toggle_detection_fsm(self):
+        print("Toggle Semaphore detection ...")
+
+        # Step 2: Send a message to /fsm_action to activate line follower
+        if (self.detection_fsm_msg.data == 1):
+            self.detection_fsm_msg.data = 0  # deactivate
+            self.detection_fsm_pub.publish(self.detection_fsm_msg)
+            print("🛑 Detection FSM deactivated ")
+        else:
+            self.detection_fsm_msg.data = 1  # activate
+            self.detection_fsm_pub.publish(self.detection_fsm_msg)
+            print("✅ Detection FSM activated ")
 
 
     def toggle_cmd_source(self):
-        mode = input("Enter mode (ik/teleop): ").strip()
+        mode = input("Enter mode (ik/teleop/line): ").strip()
         if mode not in ['ik', 'teleop', 'line']:
             print("Invalid mode.")
             return
