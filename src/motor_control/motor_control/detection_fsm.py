@@ -25,7 +25,7 @@ class DetectionFSM(Node):
         
         # Publisher 
         self.fsm_action_pub = self.create_publisher(Float32, '/fsm_action', 10)
-        self.active_detection_fsm = 1
+        self.active_detection_fsm = 0
 
         self.get_logger().info("Nodo FSM de Deteccion Iniciado")
 
