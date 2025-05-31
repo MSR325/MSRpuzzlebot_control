@@ -41,6 +41,9 @@ class TrajectoryCommander(Node):
         self.line_follow_msg = Int16()
         self.line_follow_msg.data = 0
 
+        self.pose_saver_active = False
+
+
     def goal_callback(self, msg: PoseStamped):
         orientation_q = msg.pose.orientation
         yaw = self.get_yaw_from_quaternion(orientation_q)
@@ -67,13 +70,14 @@ class TrajectoryCommander(Node):
         while rclpy.ok():
             print("""
 Trajectory Commander - Menu:
-1. Send next goal pose to robot 🎯
-2. Save trajectory 💾
-3. Send specific trajectory 🔄
-4. Toggle IK/Teleop/Line 🎮
-5. Toggle Line Following Mode 🛣️
-6. Toggle Semaphore Detection FSM 🚦
--1. Exit
+1. 🎯 Send next goal pose to robot 
+2. 💾 Save trajectory 
+3. 🔄 Send specific trajectory 
+4. 🎮 Toggle IK/Teleop/Line 
+5. 🛣️  Toggle Line Following Mode 
+6. 🚦 Toggle Semaphore Detection FSM
+7. 👣 Toggle pose_saver 
+-1. 🔚🏃Exit
 """)
             choice = input("Enter your choice: ")
             if choice == '1':
@@ -88,7 +92,8 @@ Trajectory Commander - Menu:
                 self.toggle_line_following()
             elif choice == '6':
                 self.toggle_detection_fsm()
-
+            elif choice == '7':
+                self.toggle_pose_saver()
             elif choice == '-1':
                 print("Exiting...")
                 break
@@ -349,6 +354,68 @@ Trajectory Commander - Menu:
             print(f"Switched control to {mode}! ✅")
         except Exception as e:
             print(f"Failed to switch mode: {e}")
+
+    def toggle_pose_saver(self):
+        # Check if already running
+        if hasattr(self, 'pose_saver_active') and self.pose_saver_active:
+            print("🔴 Stopping pose_saver...")
+            msg = Int16()
+            msg.data = 0
+            self.pose_saver_enable_pub.publish(msg)
+            self.pose_saver_active = False
+            print("🛑 Pose saving stopped.")
+            return
+
+        # First-time setup
+        print("🔧 Configuring pose_saver...")
+
+        try:
+            freq = float(input("Enter pose save frequency in Hz: "))
+        except ValueError:
+            print("Invalid frequency.")
+            return
+
+        filename = input("Enter file name to save poses (without .yaml): ").strip()
+        if not filename:
+            print("Filename cannot be empty.")
+            return
+
+        # Step 1: Create client and set parameters
+        param_client = self.create_client(SetParameters, '/pose_saver/set_parameters')
+        if not param_client.wait_for_service(timeout_sec=5.0):
+            print("❌ /pose_saver/set_parameters service not available.")
+            return
+
+        params = [
+            RclpyParameter('pose_save_frequency', RclpyParameter.Type.DOUBLE, freq).to_parameter_msg(),
+            RclpyParameter('trajectory_file_name', RclpyParameter.Type.STRING, filename).to_parameter_msg()
+        ]
+
+        req = SetParameters.Request()
+        req.parameters = params
+
+        future = param_client.call_async(req)
+        while not future.done() and rclpy.ok():
+            rclpy.spin_once(self, timeout_sec=0.1)
+
+        try:
+            result = future.result()
+            print("✅ Parameters set successfully.")
+        except Exception as e:
+            print(f"❌ Failed to set parameters: {e}")
+            return
+
+        # Step 2: Create publisher (if not already created)
+        if not hasattr(self, 'pose_saver_enable_pub'):
+            self.pose_saver_enable_pub = self.create_publisher(Int16, '/pose_saver_enable', 10)
+
+        # Step 3: Start saving immediately
+        msg = Int16()
+        msg.data = 1
+        self.pose_saver_enable_pub.publish(msg)
+        self.pose_saver_active = True
+        print(f"🟢 Pose saver started with frequency={freq} Hz, saving to '{filename}.yaml'.")
+        print("📌 Select option [7] again to stop pose saver.")
 
 
 

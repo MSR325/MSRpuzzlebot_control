@@ -163,6 +163,14 @@ def generate_launch_description():
         output='screen'
     )
 
+    pose_saver_node = Node(
+        name='pose_saver',
+        package='msr_simulation',
+        executable='pose_saver',
+        emulate_tty=True,
+        output='screen'
+    )
+
     display_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -209,4 +217,5 @@ def generate_launch_description():
         open_tmux_terminals,
         path_generator_node,
         static_tf_pub_node,
+        pose_saver_node,
     ])

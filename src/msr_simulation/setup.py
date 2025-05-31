@@ -34,6 +34,7 @@ setup(
             'odom_tf_broadcaster = msr_simulation.odom_tf_broadcaster:main',
             'simulation_odometry = msr_simulation.simulation_odometry:main',
             'trajectory_commander = msr_simulation.trajectory_commander:main',
+            'pose_saver = msr_simulation.pose_saver:main', 
         ],
     },
 

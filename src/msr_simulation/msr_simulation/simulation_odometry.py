@@ -52,8 +52,7 @@ class OdometryNode(Node):
         #     Float32, 'VelocityEncL', self.left_speed_callback, qos_profile)  # left/motor_speed_y VelocityEncL
         # self.right_speed_sub = self.create_subscription(
         #     Float32, 'VelocityEncR', self.right_speed_callback, qos_profile)  # right/motor_speed_y VelocityEncR
-        self.teleop_vel_sub = self.create_subscription(
-            Twist, '/cmd_vel', self.teleop_vel_sub_callback, qos_profile)  # left/motor_speed_y VelocityEncL
+        self.teleop_vel_sub = self.create_subscription( Twist, '/cmd_vel', self.teleop_vel_sub_callback, qos_profile)  # left/motor_speed_y VelocityEncL
         
         # Publicador de odometría
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
