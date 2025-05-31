@@ -175,6 +175,106 @@ class LineFollowerCentroid(Node):
             cv2.destroyWindow('Overlay')
             self.windows_open = False
 
+    # def image_callback_crips(self, msg):
+    #     # Convert ROS image to OpenCV BGR
+    #     frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    #     height, width, _ = frame.shape
+
+    #     y_start = int(height * 5/6)
+    #     y_end   = height
+    #     x_start = int(width * 0.25)
+    #     x_end   = int(width * 0.75)
+
+    #     roi = frame[y_start:y_end, x_start:x_end]
+
+    #     # Robust preprocessing: HSV → V-channel
+    #     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    #     v_channel = hsv[:, :, 2]
+
+    #     # CLAHE (adaptive contrast enhancement)
+    #     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    #     v_equalized = clahe.apply(v_channel)
+
+    #     # Gamma correction based on brightness
+    #     mean_val = np.mean(v_equalized)
+    #     gamma = 1.5 if mean_val < 90 else (0.8 if mean_val > 160 else 1.0)
+    #     invGamma = 1.0 / gamma
+    #     table = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(256)]).astype("uint8")
+    #     v_corrected = cv2.LUT(v_equalized, table)
+
+    #     # Gaussian blur and threshold
+    #     blur_k = 5
+    #     thresh_val = 146
+    #     morph_k = 5
+
+    #     blurred = cv2.GaussianBlur(v_corrected, (blur_k, blur_k), 0)
+    #     _, binary = cv2.threshold(blurred, thresh_val, 255, cv2.THRESH_BINARY_INV)
+
+    #     # Morphological ops
+    #     kernel = np.ones((morph_k, morph_k), np.uint8)
+    #     binary = cv2.dilate(binary, kernel, iterations=1)
+    #     binary = cv2.erode(binary, kernel, iterations=1)
+
+    #     histogram = np.sum(binary, axis=0)
+
+    #     if np.max(histogram) == 0:
+    #         self.get_logger().warn('No line detected! Reversing...')
+    #         twist = Twist()
+    #         twist.linear.x = -0.05
+    #         twist.angular.z = 0.0
+    #         twist.linear.x *= self.color_flag_multiplier
+    #         twist.angular.z *= self.color_flag_multiplier
+    #         if self.active_line == 1:
+    #             self.publisher.publish(twist)
+    #         else:
+    #             self.publisher.publish(Twist())  # stop
+    #         time.sleep(0.5)
+    #         return
+
+    #     line_x = int(np.argmax(histogram))
+    #     center_x = (x_end - x_start) // 2
+    #     offset = line_x - center_x
+    #     self.get_logger().info(f'Offset: {offset}')
+
+    #     # Control
+    #     Kp = 0.005
+    #     ang_z = -Kp * float(offset)
+    #     if abs(offset) < 15:
+    #         ang_z = 0.0
+    #         linear_x = 0.15
+    #     else:
+    #         linear_x = 0.08
+
+    #     linear_x *= self.color_flag_multiplier
+    #     ang_z *= self.color_flag_multiplier
+
+    #     twist = Twist()
+    #     twist.linear.x = linear_x
+    #     twist.angular.z = ang_z
+
+    #     self.get_logger().warning(f'Publishing: linear_x={linear_x}, angular_z={ang_z}')
+    #     if self.active_line == 1:
+    #         self.publisher.publish(twist)
+    #     else:
+    #         self.publisher.publish(Twist())
+
+    #     # Visualization
+    #     overlay = roi.copy()
+    #     cv2.line(overlay, (line_x, 0), (line_x, overlay.shape[0]), (0, 255, 0), 2)
+    #     cv2.line(overlay, (center_x, 0), (center_x, overlay.shape[0]), (0, 0, 255), 2)
+
+    #     if self.active_line == 1:
+    #         cv2.imshow('ROI', roi)
+    #         cv2.imshow('Binary Mask', binary)
+    #         cv2.imshow('Overlay', overlay)
+    #         cv2.waitKey(1)
+    #         self.windows_open = True
+    #     elif self.windows_open:
+    #         cv2.destroyWindow('ROI')
+    #         cv2.destroyWindow('Binary Mask')
+    #         cv2.destroyWindow('Overlay')
+    #         self.windows_open = False
+
     def fsm_action_callback(self, msg: Float32):
         self.color_flag_multiplier = msg.data
         self.get_logger().info(f"Updated color_flag_multiplier to: {self.color_flag_multiplier}")

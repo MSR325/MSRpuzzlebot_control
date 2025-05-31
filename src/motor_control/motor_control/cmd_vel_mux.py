@@ -30,7 +30,7 @@ class CmdVelMux(Node):
         self.prev_linear = 0.0
         self.prev_angular = 0.0
         self.max_linear_accel = 0.5     # m/s^2
-        self.max_angular_accel = 1.5    # rad/s^2
+        self.max_angular_accel = 2.8    # rad/s^2
         self.sample_time = 0.018        # s
 
         # Temporizador de publicación
