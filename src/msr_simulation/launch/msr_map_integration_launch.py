@@ -213,7 +213,7 @@ def generate_launch_description():
         cmd_mux_node, 
         display_launch,
         detection_fsm_node,
-        line_follow_node,
+        # line_follow_node,
         open_tmux_terminals,
         path_generator_node,
         static_tf_pub_node,
