@@ -7,8 +7,15 @@ from geometry_msgs.msg import TransformStamped
 class OdomTFBroadcaster(Node):
     def __init__(self):
         super().__init__('ekf_odom_tf_broadcaster')
+
+        # Declare and get parameter
+        self.declare_parameter("odom_topic", "ekf_odom")
+        topic_name = self.get_parameter("odom_topic").get_parameter_value().string_value
+
+        self.get_logger().info(f"📡 Subscribing to odometry topic: {topic_name}")
+
         self.br = TransformBroadcaster(self)
-        self.sub = self.create_subscription(Odometry, '/ekf_odom', self.odom_callback, 10)
+        self.sub = self.create_subscription(Odometry, topic_name, self.odom_callback, 10)
 
     def odom_callback(self, msg):
         t = TransformStamped()

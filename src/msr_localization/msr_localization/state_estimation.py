@@ -36,12 +36,14 @@ class EKFNode(Node):
             except Exception as e:
                 self.get_logger().warn(f"⚠️ Could not load Q: {e}")
 
+        self.base_frame_id = self.declare_parameter("base_frame_id", "base_link").get_parameter_value().string_value
+        self.odom_frame_id = self.declare_parameter("odom_frame_id", "odom").get_parameter_value().string_value
 
         if self.calibrate_measurement_noise and self.calibrate_process_noise:
             raise ValueError("Only one calibration mode can be active at a time!")
 
         # Subscriptions
-        self.create_subscription(Imu, 'bno085/imu', self.imu_callback, 10)
+        self.create_subscription(Imu, '/bno085/imu', self.imu_callback, 10)
         self.create_subscription(Odometry, '/odom', self.encoder_odom_callback, 10)  # odom topic has the linear and angular vels calculated with encoders [v_enc, omega_enc] 
         self.create_subscription(Twist, '/cmd_vel', self.cmd_vel_callback, 10)
 
@@ -64,7 +66,8 @@ class EKFNode(Node):
         self.right_wheel_pos = 0.0
 
         # Joint state publisher
-        self.joint_state_pub = self.create_publisher(JointState, '/joint_states', 10)
+        self.joint_pub_robot1 = self.create_publisher(JointState, '/robot1/joint_states', 10)
+        self.joint_pub_robot2 = self.create_publisher(JointState, '/robot2/joint_states', 10)
 
         self.measurement_frequency = 55 # imu 
 
@@ -79,7 +82,7 @@ class EKFNode(Node):
         self.ekf_path_msg.header.frame_id = "ekf_odom"
 
         self.odom_path_msg = Path()
-        self.odom_path_msg.header.frame_id = "odom"
+        self.odom_path_msg.header.frame_id = self.odom_frame_id
 
         self.ekf_path_counter = 0
         self.odom_path_counter = 0
@@ -186,15 +189,18 @@ class EKFNode(Node):
         joint_state.header.stamp = stamp_msg
         joint_state.name = ['left_wheel_joint', 'right_wheel_joint']
         joint_state.position = [self.left_wheel_pos, self.right_wheel_pos]
-        self.joint_state_pub.publish(joint_state)
+
+        self.joint_pub_robot1.publish(joint_state)
+        self.joint_pub_robot2.publish(joint_state)
+
 
 
 
     def publish_odometry(self, x, y, theta, v, omega, stamp):
         odom = Odometry()
         odom.header.stamp = rclpy.time.Time(seconds=stamp).to_msg()
-        odom.header.frame_id = "odom"
-        odom.child_frame_id = "base_link"
+        odom.header.frame_id = self.odom_frame_id
+        odom.child_frame_id = self.base_frame_id
 
         # Position
         odom.pose.pose.position.x = x
@@ -215,7 +221,8 @@ class EKFNode(Node):
     def update_ekf_path(self, x, y, theta, stamp):
         pose = PoseStamped()
         pose.header.stamp = rclpy.time.Time(seconds=stamp).to_msg()
-        pose.header.frame_id = "ekf_odom"
+        pose.header.frame_id = "map"  # 
+        self.ekf_path_msg.header.frame_id = "map"
         pose.pose.position.x = x
         pose.pose.position.y = y
         pose.pose.position.z = 0.0
@@ -229,8 +236,8 @@ class EKFNode(Node):
     def publish_ekf_tf(self, x, y, theta, stamp):
         t = TransformStamped()
         t.header.stamp = rclpy.time.Time(seconds=stamp).to_msg()
-        t.header.frame_id = "odom"
-        t.child_frame_id = "base_link"  # this must match odom.child_frame_id
+        t.header.frame_id = "map"           # or "map", depending on your world frame
+        t.child_frame_id = self.base_frame_id       # the robot's body
 
         t.transform.translation.x = x
         t.transform.translation.y = y
