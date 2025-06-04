@@ -6,3 +6,4 @@ log/
 *.pyc
 __pycache__/
 data/rosbag_camera
+.vscode
