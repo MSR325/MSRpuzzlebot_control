@@ -15,27 +15,33 @@ class LineFollowerCentroid(Node):
         super().__init__('line_follower_centroid')
         self.bridge = CvBridge()
 
-        self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.subscription = self.create_subscription(
-            Image, '/image_raw', self.image_callback, 10)
+        self.publisher = self.create_publisher(Twist, '/line_cmd_vel', 10)
+        self.subscription = self.create_subscription(Image, '/image_raw', self.image_callback, 10)
         
         self.get_logger().info('Line Follower Node Started')
 
         # Create control window and trackbars
         cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
-        cv2.createTrackbar('Threshold', 'Controls', 95, 255, lambda x: None)
-        cv2.createTrackbar('Blur Kernel', 'Controls', 11, 31, lambda x: None)
-        cv2.createTrackbar('Morph Kernel', 'Controls', 2, 31, lambda x: None)
-        cv2.createTrackbar('Block Size', 'Controls', 39, 51, lambda x: None)
-        cv2.createTrackbar('C (Bias)', 'Controls', 12, 20, lambda x: None)
+        # cv2.createTrackbar('Threshold', 'Controls', 95, 255, lambda x: None)
+        cv2.createTrackbar('Blur Kernel', 'Controls', 24, 31, lambda x: None)
+        cv2.createTrackbar('Morph Kernel', 'Controls', 5, 51, lambda x: None)
+        cv2.createTrackbar('Block Size', 'Controls', 76, 101, lambda x: None)
+        cv2.createTrackbar('C (Bias)', 'Controls', 13, 50, lambda x: None)
+        cv2.createTrackbar('Min Area', 'Controls', 500, 1000, lambda x: None)
 
         self.load_from_file = True  # Set to False to use manual selection
-        self.homography_matrix_path = "src/motor_control/data/homography.npy"
+        self.homography_matrix_path = "src/line_follow_msr/data/homography3.npy"
 
         self.homography_matrix = None
         self.warp_size = (200, 200)  # output size of warped image
         self.selecting_points = False
         self.src_points = []
+
+        # Controller gains
+        self.Kp_x = 0.01
+        self.xVel = 0.15
+        self.Kp_ang = 0.019
+        self.ang_e_thrsh = 2
 
         if self.load_from_file:
             try:
@@ -55,28 +61,26 @@ class LineFollowerCentroid(Node):
         self.color_flag_multiplier = msg.data
         self.get_logger().info(f"Updated color_flag_multiplier to: {self.color_flag_multiplier}")
 
-    def preprocess_region(self, region, *_):
+    def preprocess_region(self, region, blur_k, block_size, c_bias, morph_k):
         hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
         v = hsv[:, :, 2]
         
         # Apply CLAHE for contrast enhancement
         v_equalized = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(v)
 
-        # Fixed Gaussian blur for noise reduction and smoothing
-        blurred = cv2.GaussianBlur(v_equalized, (7, 7), 0)
+        # Gaussian blur (kernel must be odd and >= 1)
+        blur_k = max(1, blur_k | 1)  # force odd
+        blurred = cv2.GaussianBlur(v_equalized, (blur_k, blur_k), 0)
 
         # Adaptive threshold
-        binary = cv2.adaptiveThreshold(
-            blurred, 255,
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY_INV,
-            141, 6  # Fixed params from robust version
-        )
+        block_size = max(3, block_size | 1)  # must be odd and >= 3
+        binary = cv2.adaptiveThreshold( blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, block_size, c_bias )
 
         # Morphological filtering
-        kernel = np.ones((5, 5), np.uint8)
-        binary = cv2.erode(binary, kernel, iterations=3)
-        binary = cv2.dilate(binary, kernel, iterations=5)
+        morph_k = max(1, morph_k | 1)  # force odd
+        kernel = np.ones((morph_k, morph_k), np.uint8)
+        binary = cv2.erode(binary, kernel, iterations=1)
+        binary = cv2.dilate(binary, kernel, iterations=2)
 
         return binary
 
@@ -115,11 +119,13 @@ class LineFollowerCentroid(Node):
         # Debug: Preprocess left and right only for display
         binary_left = self.preprocess_region(roi_left, blur_k, block_size, c_bias, morph_k)
         binary_right = self.preprocess_region(roi_right, blur_k, block_size, c_bias, morph_k)
-        
+
+        min_area = cv2.getTrackbarPos('Min Area', 'Controls')
+
         #            binary_roi     offset_x        overlay     color          label
-        line_l = self.detect_line_in_roi(binary_left, 0, overlay, (255, 0, 0), "L")      # 🟦 Blue line
-        line_m = self.detect_line_in_roi(binary_middle, roi_middle_start, overlay, (255, 255, 0), "M")  # 🟩 Green line
-        line_r = self.detect_line_in_roi(binary_right, 7 * twelve_div, overlay, (255, 0, 0), "R")     # 🟦 Blue line
+        line_l = self.detect_line_in_roi(binary_left, 0, overlay, (255, 0, 0), "L", min_area)      # 🟦 Blue line
+        line_m = self.detect_line_in_roi(binary_middle, roi_middle_start, overlay, (255, 255, 0), "M", min_area)  # 🟩 Green line
+        line_r = self.detect_line_in_roi(binary_right, 7 * twelve_div, overlay, (255, 0, 0), "R", min_area)     # 🟦 Blue line
 
         x_l = line_l["x_global"] if line_l else "-"
         x_m = line_m["x_global"] if line_m else "-"
@@ -150,18 +156,52 @@ class LineFollowerCentroid(Node):
         cv2.line(overlay, (center_x, 0), (center_x, h), (0, 0, 255), 2)
 
         # Show views
-        # cv2.imshow("ROI", warped)
+        if (self.selecting_points):
+            cv2.imshow("ROI", warped)
         scale = 3.0
         resized_overlay = cv2.resize(overlay, None, fx=scale, fy=scale)
         cv2.imshow("Overlay", resized_overlay)
-        # cv2.imshow("Left", binary_left)
-        # cv2.imshow("Middle", binary_middle)
-        # cv2.imshow("Right", binary_right)
+        stacked_rois = stack_with_dividers([binary_left, binary_middle, binary_right])
+        cv2.imshow("Left | Middle | Right", stacked_rois)
+
+        # === Simple Line Following PID Controller ===
+        if line_m:
+            frame_center_x = w // 2
+            x_error = line_m["x_global"] - frame_center_x
+            line_angle = line_m["angle"]
+            if line_angle > 0:
+                angle_error = 90.0 - line_m["angle"]
+            else:
+                angle_error = -90.0 - line_m["angle"]
+            if abs(angle_error) < self.ang_e_thrsh:
+                angle_error = 0.0
+
+            linear_speed = self.xVel 
+            angular_speed = self.Kp_ang * angle_error - self.Kp_x * x_error
+
+            twist = Twist()
+            twist.linear.x = linear_speed
+            twist.angular.z = angular_speed
+            self.publisher.publish(twist)
+            self.get_logger().info(
+                f"Publishing: angle_error={angle_error:.3f}, x_error={x_error:.3f}, linear_x={linear_speed:.3f}, angular_z={angular_speed:.3f}"
+            )
+        else:
+            # Fallback behavior when no center line is detected
+            twist = Twist()
+            twist.linear.x = 0.05 * self.color_flag_multiplier
+            twist.angular.z = 0.0
+            self.publisher.publish(twist)
+            self.get_logger().warn("No line detected! Using fallback control...")
+
+
         cv2.waitKey(1)
 
-    def detect_line_in_roi(self, binary_roi, roi_x_offset, overlay=None, color=(255, 255, 0), label=""):
+    def detect_line_in_roi(self, binary_roi, roi_x_offset, overlay=None, color=(255, 255, 0), label="", min_area=150):
+
         contours, _ = cv2.findContours(binary_roi, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        contours = [c for c in contours if cv2.contourArea(c) > 150]
+
+        contours = [c for c in contours if cv2.contourArea(c) > min_area]
         
         if not contours:
             return None  # No line
@@ -236,7 +276,18 @@ def select_points(event, x, y, flags, param):
             print(f"✅ Homography saved to file: {node.homography_matrix_path}")
             print("Homography computed. Now warping every frame.")
 
-            
+def stack_with_dividers(imgs, divider_thickness=3, divider_color=255):
+    """
+    Stack grayscale images horizontally with vertical dividers.
+    imgs: list of images (all same height and 1-channel)
+    """
+    h = imgs[0].shape[0]
+    div = np.full((h, divider_thickness), divider_color, dtype=np.uint8)  # white line
+
+    result = imgs[0]
+    for img in imgs[1:]:
+        result = np.hstack((result, div, img))
+    return result
 
 
 
