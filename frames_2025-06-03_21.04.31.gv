@@ -1,0 +1,13 @@
+digraph G {
+"map" -> "ekf_odom"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"map" -> "odom"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"odom" -> "base_link"[label=" Broadcaster: default_authority\nAverage rate: 100.939\nBuffer length: 2.061\nMost recent transform: 1749006271.662071\nOldest transform: 1749006269.601421\n"];
+"robot2_base_link" -> "robot2_left_wheel"[label=" Broadcaster: default_authority\nAverage rate: 17.16\nBuffer length: 2.04\nMost recent transform: 1749006271.6411\nOldest transform: 1749006269.601421\n"];
+"robot2_base_link" -> "robot2_right_wheel"[label=" Broadcaster: default_authority\nAverage rate: 17.16\nBuffer length: 2.04\nMost recent transform: 1749006271.6411\nOldest transform: 1749006269.601421\n"];
+"robot1_base_link" -> "robot1_left_wheel"[label=" Broadcaster: default_authority\nAverage rate: 17.16\nBuffer length: 2.04\nMost recent transform: 1749006271.6411\nOldest transform: 1749006269.601421\n"];
+"robot1_base_link" -> "robot1_right_wheel"[label=" Broadcaster: default_authority\nAverage rate: 17.16\nBuffer length: 2.04\nMost recent transform: 1749006271.6411\nOldest transform: 1749006269.601421\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1749006271.67799"[ shape=plaintext ] ;
+}->"robot1_base_link";
+}
