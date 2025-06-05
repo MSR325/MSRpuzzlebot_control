@@ -30,7 +30,7 @@ class LineFollowerCentroid(Node):
         cv2.createTrackbar('Min Area', 'Controls', 500, 1000, lambda x: None)
 
         self.load_from_file = True  # Set to False to use manual selection
-        self.homography_matrix_path = "src/line_follow_msr/data/homography3.npy"
+        self.homography_matrix_path = "/home/idmx/ros2_ws_2/src/line_follow_msr/data/homography3.npy"
 
         self.homography_matrix = None
         self.warp_size = (200, 200)  # output size of warped image
