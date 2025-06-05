@@ -24,7 +24,6 @@ setup(
         'console_scripts': [
             'line_follower_samu = line_follow_msr.line_follower_samu:main',
             'line_follower_gordo = line_follow_msr.line_follower_gordo:main',
-            'line_follower_hamburguesota = line_follow_msr.line_follower_hamburguesota:main'
         ],
     },
 )
