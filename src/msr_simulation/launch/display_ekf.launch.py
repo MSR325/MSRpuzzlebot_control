@@ -36,13 +36,14 @@ def generate_launch_description():
         # EKF broadcaster for Robot 1 (odom → base_link)
         Node(
             package='msr_simulation',
-            executable='ekf_odom_tf_broadcaster',
-            name='ekf_odom_tf_broadcaster',
+            executable='odom_tf_broadcaster',
+            name='odom_tf_broadcaster',
+            namespace='robot1',
             output='screen',
             parameters=[
                 {'base_frame_id': 'base_link'},
                 {'odom_frame_id': 'odom'},
-                {'odom_topic': 'ekf_odom'}
+                {'odom_topic': '/odom'}
             ]
         ),
 
@@ -56,7 +57,7 @@ def generate_launch_description():
             parameters=[
                 {'base_frame_id': 'robot2_base_link'},
                 {'odom_frame_id': 'ekf_odom'},
-                {'odom_topic': 'ekf_odom'}
+                {'odom_topic': '/ekf_odom'}
             ]
         ),
 
