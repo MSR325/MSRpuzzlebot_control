@@ -118,13 +118,13 @@ class EKFNode(Node):
 
     def run_ekf_loop(self):
         if self.latest_encoder is None or self.latest_imu is None:
-            # self.get_logger().info(f"return")
+            self.get_logger().info(f"return")
             return
 
         now = self.get_clock().now().nanoseconds / 1e9
         dt = now - self.prev_time
         if dt <= 0.001:
-            # self.get_logger().info(f"return 2")
+            self.get_logger().info(f"return 2")
             return
         self.prev_time = now
 

@@ -44,20 +44,15 @@ class LineFollowerCentroid(Node):
         # Controller gains
         self.Kp_x = 0.01
         self.xVel = 0.15
-        self.Kp_ang = 0.022
+        self.Kp_ang = 0.019
         self.ang_e_thrsh = 2
 
         self.middle_line_buffer = []
-        self.middle_line_buffer_size = 50
+        self.middle_line_buffer_size = 10
         self.last_valid_middle_x = None
         self.x_diff_threshold = 20  # pixels
         self.drift_frame_count = 0
-        self.max_drift_frames = 10
-
-        self.in_fallback_mode      = False      # are we currently following a side line?
-        self.fallback_target       = None       # "LEFT" or "RIGHT"
-        self.fallback_ang_scale    = 2.0        # >1.0 gives a ‘snap’ turn
-        self.mid_reacq_tol         = 15         # px; how centred a line must be to exit fallback
+        self.max_drift_frames = 5
 
 
         if self.load_from_file:
@@ -101,16 +96,19 @@ class LineFollowerCentroid(Node):
 
         return binary
 
-
+    
     def image_callback(self, msg):
+        # Convert ROS image to OpenCV BGR
         frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
+        # Warp full image if homography is ready
         if self.homography_matrix is not None:
             warped = cv2.warpPerspective(frame, self.homography_matrix, self.warp_size)
-            warped = cv2.flip(warped, 1)
+            warped = cv2.flip(warped, 1)  # 1 means flip around Y axis
         else:
             warped = frame
 
+        # Split warped image into 3 vertical ROIs
         overlay = warped.copy()
         h, w, _ = warped.shape
 
@@ -118,108 +116,153 @@ class LineFollowerCentroid(Node):
         twelve_div = w // 12
         roi_middle_start = 2 * twelve_div
         roi_middle_end = 10 * twelve_div
-        roi_left = warped[:, 0:5 * twelve_div]
+        roi_left = warped[:, 0:5*twelve_div]
         roi_middle = warped[:, roi_middle_start:roi_middle_end]
-        roi_right = warped[:, 7 * twelve_div:]
+        roi_right = warped[:, 7*twelve_div:]
 
+        # Trackbar parameters
         blur_k = max(1, cv2.getTrackbarPos('Blur Kernel', 'Controls') | 1)
         morph_k = max(1, cv2.getTrackbarPos('Morph Kernel', 'Controls') | 1)
         block_size = max(3, cv2.getTrackbarPos('Block Size', 'Controls') | 1)
         c_bias = cv2.getTrackbarPos('C (Bias)', 'Controls')
-        min_area = cv2.getTrackbarPos('Min Area', 'Controls')
 
-        binary_left = self.preprocess_region(roi_left, blur_k, block_size, c_bias, morph_k)
+        # Preprocess only middle ROI for control logic
         binary_middle = self.preprocess_region(roi_middle, blur_k, block_size, c_bias, morph_k)
+        # Debug: Preprocess left and right only for display
+        binary_left = self.preprocess_region(roi_left, blur_k, block_size, c_bias, morph_k)
         binary_right = self.preprocess_region(roi_right, blur_k, block_size, c_bias, morph_k)
 
-        line_l = self.detect_line_in_roi(binary_left, 0, overlay, (255, 0, 0), "L", min_area)
-        line_m = self.detect_line_in_roi(binary_middle, roi_middle_start, overlay, (255, 255, 0), "M", min_area)
-        line_r = self.detect_line_in_roi(binary_right, 7 * twelve_div, overlay, (255, 0, 0), "R", min_area)
+        min_area = cv2.getTrackbarPos('Min Area', 'Controls')
 
+        #            binary_roi     offset_x        overlay     color          label
+        line_l = self.detect_line_in_roi(binary_left, 0, overlay, (255, 0, 0), "L", min_area)      # 🟦 Blue line
+        line_m = self.detect_line_in_roi(binary_middle, roi_middle_start, overlay, (255, 255, 0), "M", min_area)  # 🟩 Green line
+        line_r = self.detect_line_in_roi(binary_right, 7 * twelve_div, overlay, (255, 0, 0), "R", min_area)     # 🟦 Blue line
+
+        x_l = line_l["x_global"] if line_l else "-"
+        x_m = line_m["x_global"] if line_m else "-"
+        x_r = line_r["x_global"] if line_r else "-"
+
+        a_l = f'{line_l["angle"]:.1f}' if line_l else "-"
+        a_m = f'{line_m["angle"]:.1f}' if line_m else "-"
+        a_r = f'{line_r["angle"]:.1f}' if line_r else "-"
+
+        text_x = f"x: L={x_l} M={x_m} R={x_r}"
+        text_a = f"ang: L={a_l} M={a_m} R={a_r}"
+
+        # Position: bottom left corner
+        thickness = 1     # Still visible but thin
+        text_color = (255, 255, 255)
+
+        # Compute text positions
+        x_start = 10
+        y_start = overlay.shape[0] - 25
+
+        cv2.putText(overlay, text_x, (x_start, y_start), cv2.FONT_HERSHEY_SIMPLEX, 0.4, text_color, thickness)
+        cv2.putText(overlay, text_a, (x_start, y_start + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, text_color, thickness)
+
+
+
+        # Overlay display
         center_x = w // 2
-        h_text = overlay.shape[0] - 25
-        cv2.putText(overlay, f"x: L={line_l['x_global'] if line_l else '-'} M={line_m['x_global'] if line_m else '-'} R={line_r['x_global'] if line_r else '-'}", (10, h_text), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-        cv2.putText(overlay, f"ang: L={line_l['angle']:.1f}" if line_l else "-" + f" M={line_m['angle']:.1f}" if line_m else "-" + f" R={line_r['angle']:.1f}" if line_r else "-", (10, h_text + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
         cv2.line(overlay, (center_x, 0), (center_x, h), (0, 0, 255), 2)
 
-        if self.selecting_points:
+        # Show views
+        if (self.selecting_points):
             cv2.imshow("ROI", warped)
-        cv2.imshow("Overlay", cv2.resize(overlay, None, fx=3.0, fy=3.0))
-        cv2.imshow("Left | Middle | Right", stack_with_dividers([binary_left, binary_middle, binary_right]))
+        scale = 3.0
+        resized_overlay = cv2.resize(overlay, None, fx=scale, fy=scale)
+        cv2.imshow("Overlay", resized_overlay)
+        stacked_rois = stack_with_dividers([binary_left, binary_middle, binary_right])
+        cv2.imshow("Left | Middle | Right", stacked_rois)
 
-        # --- Fallback active check ---
-        if self.in_fallback_mode:
-            target_line = line_l if self.fallback_target == "LEFT" else line_r
-            if target_line:
-                twist = Twist()
-                x_err = target_line["x_global"] - center_x
-                ang_err = 90.0 - target_line["angle"] if target_line["angle"] > 0 else -90.0 - target_line["angle"]
-                if abs(ang_err) < self.ang_e_thrsh:
-                    ang_err = 0.0
-                twist.linear.x = self.xVel
-                twist.angular.z = (self.Kp_ang * ang_err - self.Kp_x * x_err) * self.fallback_ang_scale
-                self.publisher.publish(twist)
-                self.get_logger().info(f"[↩ Fallback-{self.fallback_target}] x_err={x_err:.1f}, ang_err={ang_err:.1f}")
+        # === Simple Line Following PID Controller ===
+        use_middle_line = False
+        frame_center_x = w // 2
 
-                if roi_middle_start <= target_line["x_global"] <= roi_middle_end:
-                    self.get_logger().info("[✅ EXIT Fallback] Side line reached middle ROI.")
-                    self.in_fallback_mode = False
-                    self.fallback_target = None
-                    self.middle_line_buffer.clear()
-                    self.drift_frame_count = 0
-            else:
-                self.get_logger().info("[↩ Fallback] Target side line not visible.")
-            cv2.waitKey(1)
-            return
-
-        # --- Middle line logic ---
         if line_m:
-            x_now = line_m["x_global"]
-            self.middle_line_buffer.append(x_now)
+            current_x = line_m["x_global"]
+            self.middle_line_buffer.append(current_x)
             if len(self.middle_line_buffer) > self.middle_line_buffer_size:
                 self.middle_line_buffer.pop(0)
 
-            avg_x = np.mean(self.middle_line_buffer[-3:]) if len(self.middle_line_buffer) >= 3 else x_now
-            x_diff = abs(x_now - avg_x)
-            self.get_logger().info(f"[🟢 LINE M DETECTED] x={x_now:.1f}, avg3={avg_x:.1f}, x_diff={x_diff:.1f}")
+            recent_avg = np.mean(self.middle_line_buffer[-3:]) if len(self.middle_line_buffer) >= 3 else current_x
+            x_diff = abs(current_x - recent_avg)
+
+            self.get_logger().info(f"[🟢 LINE M DETECTED] x={current_x:.1f}, avg3={recent_avg:.1f}, x_diff={x_diff:.1f}")
 
             if x_diff < self.x_diff_threshold:
-                self.last_valid_middle_x = x_now
+                self.last_valid_middle_x = current_x
                 self.drift_frame_count = 0
-                x_error = x_now - center_x
-                angle_error = 90.0 - line_m["angle"] if line_m["angle"] > 0 else -90.0 - line_m["angle"]
-                if abs(angle_error) < self.ang_e_thrsh:
-                    angle_error = 0.0
-                twist = Twist()
-                twist.linear.x = self.xVel
-                twist.angular.z = self.Kp_ang * angle_error - self.Kp_x * x_error
-                self.publisher.publish(twist)
-                self.get_logger().info(f"[🧭 FOLLOWING MIDDLE] x_err={x_error:.1f}, ang_err={angle_error:.1f}")
+                use_middle_line = True
+                self.get_logger().info("[✅ MIDDLE OK] x_diff within threshold — using current middle line.")
             else:
                 self.drift_frame_count += 1
-                self.get_logger().warn(f"[⚠️ MIDDLE DRIFT] x_diff={x_diff:.1f} frame_count={self.drift_frame_count}")
                 if self.drift_frame_count >= self.max_drift_frames:
-                    self.get_logger().warn("[🚨 SWITCHING TO FALLBACK]")
+                    self.get_logger().warn("⚠️ Middle line lost! Switching to nearest side line.")
+                    use_middle_line = False
+                else:
+                    self.get_logger().info("[🔄 JITTER SUPPRESSED]. Holding last known good position.")
+                    line_m["x_global"] = self.last_valid_middle_x
+                    use_middle_line = True
+
+            if use_middle_line:
+
+                frame_center_x = w // 2
+                x_error = line_m["x_global"] - frame_center_x
+                line_angle = line_m["angle"]
+                if line_angle > 0:
+                    angle_error = 90.0 - line_m["angle"]
+                else:
+                    angle_error = -90.0 - line_m["angle"]
+                if abs(angle_error) < self.ang_e_thrsh:
+                    angle_error = 0.0
+
+                linear_speed = self.xVel 
+                angular_speed = self.Kp_ang * angle_error - self.Kp_x * x_error
+
+                twist = Twist()
+                twist.linear.x = linear_speed
+                twist.angular.z = angular_speed
+                self.publisher.publish(twist)
+
+                self.get_logger().info(f"[🧭 FOLLOWING MIDDLE] x_error={x_error:.1f}, angle_error={angle_error:.1f}, linear_x={linear_speed:.2f}, angular_z={angular_speed:.2f}")
+                # self.get_logger().info(f"Publishing: angle_error={angle_error:.3f}, x_error={x_error:.3f}, linear_x={linear_speed:.3f}, angular_z={angular_speed:.3f}")
+            else:
+                self.get_logger().info("[🧭 FALLBACK MODE] Trying to find closest side line to last known middle.")
+                if self.last_valid_middle_x is not None:
+                # Choose side line closest to previous middle
+                    twist = Twist()
                     candidates = []
                     if line_l:
                         candidates.append(("LEFT", line_l, abs(line_l["x_global"] - self.last_valid_middle_x)))
                     if line_r:
                         candidates.append(("RIGHT", line_r, abs(line_r["x_global"] - self.last_valid_middle_x)))
+
                     if candidates:
-                        self.fallback_target, _, _ = min(candidates, key=lambda x: x[2])
-                        self.in_fallback_mode = True
-                        return
-                else:
-                    line_m["x_global"] = self.last_valid_middle_x
+                        chosen_label, chosen_line, _ = min(candidates, key=lambda x: x[2])
+                        x_error = chosen_line["x_global"] - frame_center_x
+                        angle_error = 90.0 - chosen_line["angle"] if chosen_line["angle"] > 0 else -90.0 - chosen_line["angle"]
+                        if abs(angle_error) < self.ang_e_thrsh:
+                            angle_error = 0.0
 
-        else:
-            twist = Twist()
-            twist.linear.x = -0.1 * self.color_flag_multiplier
-            twist.angular.z = 0.0
-            self.publisher.publish(twist)
-            self.get_logger().warn("[🚫 NO LINES] Emergency reverse.")
+                        twist.linear.x = self.xVel
+                        twist.angular.z = self.Kp_ang * angle_error - self.Kp_x * x_error
+                        self.publisher.publish(twist)
+
+                        self.get_logger().info(
+                            f"[🔁 USING {chosen_label}] x_error={x_error:.1f}, angle_error={angle_error:.1f}, linear_x={twist.linear.x:.2f}, angular_z={twist.angular.z:.2f}"
+                        )
+
+                    else: 
+                        # Fallback behavior when no center line is detected
+                        twist.linear.x = -0.15 * self.color_flag_multiplier
+                        twist.angular.z = 0.0
+                        self.publisher.publish(twist)
+                        self.get_logger().warn("No line detected! Using fallback control...")
+
+
         cv2.waitKey(1)
-
 
     def detect_line_in_roi(self, binary_roi, roi_x_offset, overlay=None, color=(255, 255, 0), label="", min_area=150):
 

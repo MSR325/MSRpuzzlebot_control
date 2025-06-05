@@ -82,13 +82,13 @@ def generate_launch_description():
         output='screen'
     )
 
-    pose_saver_node = Node(
-        name='pose_saver',
-        package='msr_simulation',
-        executable='pose_saver',
-        emulate_tty=False,
-        output='screen'
-    )
+    # pose_saver_node = Node(
+    #     name='pose_saver',
+    #     package='msr_simulation',
+    #     executable='pose_saver',
+    #     emulate_tty=False,
+    #     output='screen'
+    # )
 
     # # --- Robot 2 functional nodes (in /robot2 namespace) ---
     # robot2_nodes = GroupAction([
@@ -146,7 +146,7 @@ def generate_launch_description():
         cmd_mux_node,
         static_tf_pub_node,
         ekf_static_tf_pub_node,
-        pose_saver_node,
+        # pose_saver_node,
         # robot2_nodes,
         display_launch,
         # open_tmux_terminals
