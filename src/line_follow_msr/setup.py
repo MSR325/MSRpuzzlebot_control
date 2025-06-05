@@ -27,6 +27,7 @@ setup(
             'line_follower_hamburguesota = line_follow_msr.line_follower_hamburguesota:main',
             'line_follower_obesidad = line_follow_msr.line_follower_obesidad:main',
             'line_follower_sobrepeso = line_follow_msr.line_follower_sobrepeso:main',
+            'line_follower_bigChungus = line_follow_msr.line_follower_bigChungus:main',
 
         ],
     },
