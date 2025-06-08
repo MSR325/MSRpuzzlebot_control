@@ -31,10 +31,11 @@ class LineFollowerCentroid(Node):
         cv2.createTrackbar('C (Bias)', 'Controls', 13, 50, lambda x: None)
         cv2.createTrackbar('Min Area', 'Controls', 500, 1000, lambda x: None)
 
-        self.load_from_file = True  # Set to False to use manual selection
+        self.load_from_file = True # Set to False to use manual selection
         
         pkg_path = get_package_share_directory('line_follow_msr')
-        self.homography_matrix_path = os.path.join(pkg_path, 'data', 'homography3.npy')
+        # self.homography_matrix_path = os.path.join(pkg_path, 'data', 'homography3.npy')
+        self.homography_matrix_path = "src/line_follow_msr/data/homography_msr3.npy"
 
         self.homography_matrix = None
         self.warp_size = (200, 200)  # output size of warped image
@@ -143,7 +144,9 @@ class LineFollowerCentroid(Node):
         cv2.line(overlay, (center_x, 0), (center_x, h), (0, 0, 255), 2)
 
         if self.selecting_points:
-            cv2.imshow("ROI", warped)
+            scaled = cv2.resize(warped, None, fx=3.0, fy=3.0)
+            cv2.imshow("ROI", scaled)
+
         cv2.imshow("Overlay", cv2.resize(overlay, None, fx=3.0, fy=3.0))
         cv2.imshow("Left | Middle | Right", stack_with_dividers([binary_left, binary_middle, binary_right]))
 
@@ -280,8 +283,11 @@ def main(args=None):
 def select_points(event, x, y, flags, param):
     node = param
     if event == cv2.EVENT_LBUTTONDOWN and node.selecting_points:
-        node.src_points.append([x, y])
-        print(f"Selected point: ({x},{y})")
+        x_unscaled = x / 3.0
+        y_unscaled = y / 3.0
+        node.src_points.append([x_unscaled, y_unscaled])
+
+        print(f"Selected point: ({x_unscaled},{y_unscaled})")
         if len(node.src_points) == 4:
             node.src_points = np.array(node.src_points, dtype=np.float32)
             node.dst_points = np.array([

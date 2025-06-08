@@ -336,10 +336,20 @@ Trajectory Commander - Menu:
 
 
     def toggle_cmd_source(self):
-        mode = input("Enter mode (ik/teleop/line): ").strip()
-        if mode not in ['ik', 'teleop', 'line']:
-            print("Invalid mode.")
+        print("""
+  [0] 🔁 teleop
+  [1] 🔀 line
+  [2] 🧠 ik
+        """)
+        index_map = {0: 'teleop', 1: 'line', 2: 'ik'}
+
+        try:
+            idx = int(input("Enter index of mode: ").strip())
+            mode = index_map[idx]
+        except (ValueError, KeyError):
+            print("❌ Invalid index. Please enter 0, 1, or 2.")
             return
+
 
         req = SwitchPublisher.Request()
         req.active_source = mode

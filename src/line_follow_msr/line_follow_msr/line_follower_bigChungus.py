@@ -34,7 +34,7 @@ class LineFollowerCentroid(Node):
         self.load_from_file = True  # Set to False to use manual selection
         
         pkg_path = get_package_share_directory('line_follow_msr')
-        self.homography_matrix_path = os.path.join(pkg_path, 'data', 'homography3.npy')
+        self.homography_matrix_path = "src/line_follow_msr/data/homography3.npy"
 
         self.homography_matrix = None
         self.warp_size = (200, 200)  # output size of warped image
@@ -145,10 +145,10 @@ class LineFollowerCentroid(Node):
         cv2.putText(overlay, f"ang: L={line_l['angle']:.1f}" if line_l else "-" + f" M={line_m['angle']:.1f}" if line_m else "-" + f" R={line_r['angle']:.1f}" if line_r else "-", (10, h_text + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
         cv2.line(overlay, (center_x, 0), (center_x, h), (0, 0, 255), 2)
 
-        if self.selecting_points:
-            cv2.imshow("ROI", warped)
+        # if self.selecting_points:
+        #     cv2.imshow("ROI", warped)
         cv2.imshow("Overlay", cv2.resize(overlay, None, fx=3.0, fy=3.0))
-        cv2.imshow("Left | Middle | Right", stack_with_dividers([binary_left, binary_middle, binary_right]))
+        # cv2.imshow("Left | Middle | Right", stack_with_dividers([binary_left, binary_middle, binary_right]))
 
         # --- Fallback active check ---
         if self.in_fallback_mode:
@@ -298,8 +298,9 @@ class LineFollowerCentroid(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = LineFollowerCentroid()
-    cv2.namedWindow("ROI")
-    cv2.setMouseCallback("ROI", select_points, node)
+    if node.selecting_points:
+        cv2.namedWindow("ROI")
+        cv2.setMouseCallback("ROI", select_points, node)
     try:
         rclpy.spin(node)
     finally:
