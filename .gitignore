@@ -5,5 +5,5 @@ install/
 log/
 *.pyc
 __pycache__/
-data/
+data/rosbag_camera
 .vscode
