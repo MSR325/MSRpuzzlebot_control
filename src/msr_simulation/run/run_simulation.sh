@@ -16,9 +16,12 @@ if tmux has-session -t msr 2>/dev/null; then
 fi
 
 # Start new tmux session and split it
-tmux new-session -d -s msr 'ros2 run motor_control teleop_twist_keyboard' \; \
-  split-window -h 'ros2 run msr_simulation trajectory_commander' \; \
+tmux new-session -d -s msr \; \
+  send-keys 'source install/setup.bash && ros2 run motor_control teleop_twist_keyboard' Enter \; \
+  split-window -h \; \
+  send-keys 'source install/setup.bash && ros2 run msr_simulation trajectory_commander' Enter \; \
   select-pane -L \; \
-  split-window -v 'ros2 run map_context_tests map_tagger' \; \
+  split-window -v \; \
+  send-keys 'source install/setup.bash && ros2 run map_context_tests map_tagger' Enter \; \
   select-layout tiled \; \
   attach
