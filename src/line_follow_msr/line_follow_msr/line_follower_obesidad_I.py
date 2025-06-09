@@ -41,7 +41,7 @@ class LineFollowerCentroid(Node):
 
         # Homografía (BEV)
         self.declare_parameter('homography_matrix_path',
-            '/home/idmx/ros2_ws_2/src/line_follow_msr/data/homography3.npy')
+            'src/line_follow_msr/data/homography3.npy')
         self.declare_parameter('warp_width',       200)
         self.declare_parameter('warp_height',      200)
 
