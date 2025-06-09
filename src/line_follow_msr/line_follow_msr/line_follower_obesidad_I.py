@@ -30,7 +30,7 @@ class LineFollowerCentroid(Node):
         # Control P
         self.declare_parameter('Kp_x',             0.01)
         self.declare_parameter('Kp_ang',           0.019)
-        self.declare_parameter('xVel',             0.15)
+        self.declare_parameter('xVel',             0.175)
         self.declare_parameter('ang_e_thrsh',      2.0)
 
         # Umbral mínimo de área para filtrar contornos

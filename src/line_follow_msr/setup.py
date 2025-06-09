@@ -33,6 +33,7 @@ setup(
             'line_follower_THICK = line_follow_msr.line_follower_THICK:main',
             'line_follower_WesternBacon = line_follow_msr.line_follower_WesternBacon:main',
             'crossroad_detection = line_follow_msr.crossroad_detection:main',
+            'line_follower_obesidad_II = line_follow_msr.line_follower_obesidad_II:main',
         ],
     },
 )
