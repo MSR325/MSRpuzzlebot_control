@@ -157,8 +157,8 @@ def generate_launch_description():
 
     line_follow_node = Node(
         name='line_follow_node',
-        package='motor_control',
-        executable='line_follower',
+        package='line_follow_msr',
+        executable='line_follower_obesidad_I_for_launch',
         emulate_tty=True,
         output='screen'
     )
@@ -167,6 +167,22 @@ def generate_launch_description():
         name='pose_saver',
         package='msr_simulation',
         executable='pose_saver',
+        emulate_tty=True,
+        output='screen'
+    )
+
+    undistort_image_node = Node(
+        name='undistort_image',
+        package='msr_camera_calibration',
+        executable='undistort_image',
+        emulate_tty=True,
+        output='screen'
+    )
+    
+    crossroad_detection_node = Node(
+        name='crossroad_detection_node',
+        package='line_follow_msr',
+        executable='crossroad_detection_for_launch',
         emulate_tty=True,
         output='screen'
     )
@@ -213,9 +229,11 @@ def generate_launch_description():
         cmd_mux_node, 
         display_launch,
         detection_fsm_node,
-        # line_follow_node,
+        line_follow_node,
         open_tmux_terminals,
         path_generator_node,
         static_tf_pub_node,
         pose_saver_node,
+        undistort_image_node,
+        crossroad_detection_node
     ])

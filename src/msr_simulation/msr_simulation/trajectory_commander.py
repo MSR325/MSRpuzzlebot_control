@@ -27,6 +27,7 @@ class TrajectoryCommander(Node):
         self.marker_pub = self.create_publisher(MarkerArray, '/trajectory_markers', 10)
         self.line_follow_pub = self.create_publisher(Int16, '/line_follow_enable', 10)
         self.detection_fsm_pub = self.create_publisher(Int16, '/detection_fsm_enable', 10)
+        self.crossroad_detect_pub = self.create_publisher(Int16, '/crossroad_detect_enable', 10)
 
         self.set_param_cli = self.create_client(SetParameters, '/inverse_kinematics/set_parameters')
         self.switch_cmd_cli = self.create_client(SwitchPublisher, '/switch_cmd_source')
@@ -40,6 +41,9 @@ class TrajectoryCommander(Node):
 
         self.line_follow_msg = Int16()
         self.line_follow_msg.data = 0
+
+        self.crossroad_detect_msg = Int16()
+        self.crossroad_detect_msg.data = 0
 
         self.pose_saver_active = False
 
@@ -77,6 +81,7 @@ Trajectory Commander - Menu:
 5. 🛣️  Toggle Line Following Mode 
 6. 🚦 Toggle Semaphore Detection FSM
 7. 👣 Toggle pose_saver 
+8. 🧭 Toggle Crossroad Detection
 -1. 🔚🏃Exit
 """)
             choice = input("Enter your choice: ")
@@ -94,6 +99,8 @@ Trajectory Commander - Menu:
                 self.toggle_detection_fsm()
             elif choice == '7':
                 self.toggle_pose_saver()
+            elif choice == '8':
+                self.toggle_crossroad_detection()
             elif choice == '-1':
                 print("Exiting...")
                 break
@@ -426,6 +433,18 @@ Trajectory Commander - Menu:
         self.pose_saver_active = True
         print(f"🟢 Pose saver started with frequency={freq} Hz, saving to '{filename}.yaml'.")
         print("📌 Select option [7] again to stop pose saver.")
+
+    def toggle_crossroad_detection(self):
+        print("Toggling crossroad detection...")
+
+        if self.crossroad_detect_msg.data == 1:
+            self.crossroad_detect_msg.data = 0
+            self.crossroad_detect_pub.publish(self.crossroad_detect_msg)
+            print("🛑 Crossroad detection deactivated")
+        else:
+            self.crossroad_detect_msg.data = 1
+            self.crossroad_detect_pub.publish(self.crossroad_detect_msg)
+            print("✅ Crossroad detection activated")
 
 
 
