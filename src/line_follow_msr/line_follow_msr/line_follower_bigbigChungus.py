@@ -1,3 +1,6 @@
+# intenté calcular el radio de manera diferente, pero no vale v
+
+
 #!/usr/bin/env python3
 
 import rclpy
@@ -55,7 +58,7 @@ class LineFollowerCentroid(Node):
         self.last_valid_middle_x = None
         self.x_diff_threshold = 20  # pixels
         self.drift_frame_count = 0
-        self.max_drift_frames = 50
+        self.max_drift_frames = 10
 
         self.in_fallback_mode      = False      # are we currently following a side line?
         self.fallback_target       = None       # "LEFT" or "RIGHT"
@@ -142,7 +145,13 @@ class LineFollowerCentroid(Node):
         center_x = w // 2
         h_text = overlay.shape[0] - 25
         cv2.putText(overlay, f"x: L={line_l['x_global'] if line_l else '-'} M={line_m['x_global'] if line_m else '-'} R={line_r['x_global'] if line_r else '-'}", (10, h_text), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-        cv2.putText(overlay, f"ang: L={line_l['angle']:.1f}" if line_l else "-" + f" M={line_m['angle']:.1f}" if line_m else "-" + f" R={line_r['angle']:.1f}" if line_r else "-", (10, h_text + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
+        angle_str = "ang:"
+        angle_str += f" L={line_l['angle']:.1f}" if line_l else " L=-"
+        angle_str += f" M={line_m['angle']:.1f}" if line_m else " M=-"
+        angle_str += f" R={line_r['angle']:.1f}" if line_r else " R=-"
+
+        cv2.putText(overlay, angle_str, (10, h_text + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
+
         cv2.line(overlay, (center_x, 0), (center_x, h), (0, 0, 255), 2)
 
         # if self.selecting_points:
@@ -257,24 +266,35 @@ class LineFollowerCentroid(Node):
             offset_contour = np.array(offset_contour, dtype=np.int32)
             cv2.drawContours(overlay, [offset_contour], -1, (0, 255, 0), 2)  # 🟩 Green
 
-
-            # --- Estimate curvature using circle fitting ---
-            if label == "M":  # Only draw for middle
+            # --- Estimate curvature using 3-point circle fitting ---
+            if label == "M":
                 try:
-                    (x_c, y_c), self.detected_mid_radius = cv2.minEnclosingCircle(largest)
-                    center = (int(x_c) + roi_x_offset, int(y_c))
-                    self.detected_mid_radius = float(self.detected_mid_radius)
+                    pts = largest.squeeze()
+                    if len(pts.shape) != 2 or pts.shape[0] < 3:
+                        raise ValueError("Not enough points for curvature estimation")
+
+                    # Choose 3 representative points
+                    p1 = pts[0]
+                    p2 = pts[len(pts) // 2]
+                    p3 = pts[-1]
+
+                    radius = self.fit_circle_from_3pts(p1, p2, p3)
+                    self.detected_mid_radius = radius
+
+                    # Estimate center of the circle (optional, for drawing)
+                    cx, cy = self.estimate_circle_center(p1, p2, p3)
+                    center_draw = (int(cx) + roi_x_offset, int(cy))
 
                     # Draw the circle
-                    cv2.circle(overlay, center, int(self.detected_mid_radius), (0, 255, 255), 1)  # yellow
+                    cv2.circle(overlay, center_draw, int(min(100, radius)), (0, 255, 255), 1)
 
-                    # Draw curvature annotation
-                    cv2.putText(overlay, f"{label} R: {self.detected_mid_radius:.1f}", (roi_x_offset + 5, 50),
+                    # Annotate radius
+                    cv2.putText(overlay, f"{label} R: {radius:.1f}", (roi_x_offset + 5, 50),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
 
-                except cv2.error as e:
-                    print(f"⚠️ Circle fitting failed: {e}")
-                    self.detected_mid_radius = float('inf')  # Treat as straight line
+                except Exception as e:
+                    print(f"⚠️ 3-point circle fit failed: {e}")
+                    self.detected_mid_radius = float('inf')  # Treat as straight
 
             # Draw line
             pt1 = (roi_x_offset + int(x0 - vx * 50), int(y0 - vy * 50))
@@ -293,6 +313,37 @@ class LineFollowerCentroid(Node):
             "length": cv2.arcLength(largest, closed=False),
             "contour": largest
         }
+    
+    def fit_circle_from_3pts(self, p1, p2, p3):
+        """Fit circle from 3 points and return radius"""
+        temp = p2[0]**2 + p2[1]**2
+        bc = (p1[0]**2 + p1[1]**2 - temp) / 2.0
+        cd = (temp - p3[0]**2 - p3[1]**2) / 2.0
+        det = (p1[0]-p2[0])*(p2[1]-p3[1]) - (p2[0]-p3[0])*(p1[1]-p2[1])
+
+        if abs(det) < 1e-6:
+            return float('inf')  # Colinear → infinite radius
+
+        cx = (bc*(p2[1]-p3[1]) - cd*(p1[1]-p2[1])) / det
+        cy = ((p1[0]-p2[0])*cd - (p2[0]-p3[0])*bc) / det
+        radius = np.sqrt((cx - p1[0])**2 + (cy - p1[1])**2)
+        return radius
+
+    def estimate_circle_center(self, p1, p2, p3):
+        """Return center of circle fit from 3 points"""
+        temp = p2[0]**2 + p2[1]**2
+        bc = (p1[0]**2 + p1[1]**2 - temp) / 2.0
+        cd = (temp - p3[0]**2 - p3[1]**2) / 2.0
+        det = (p1[0]-p2[0])*(p2[1]-p3[1]) - (p2[0]-p3[0])*(p1[1]-p2[1])
+
+        if abs(det) < 1e-6:
+            return (p1[0], p1[1])  # Fallback
+
+        cx = (bc*(p2[1]-p3[1]) - cd*(p1[1]-p2[1])) / det
+        cy = ((p1[0]-p2[0])*cd - (p2[0]-p3[0])*bc) / det
+        return (cx, cy)
+
+
 
 
 def main(args=None):
