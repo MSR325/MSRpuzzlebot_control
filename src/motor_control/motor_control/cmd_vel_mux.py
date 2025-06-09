@@ -53,11 +53,23 @@ class CmdVelMux(Node):
             response.success = True
             response.message = f"Active source changed to {self.active_source}"
             self.get_logger().info(response.message)
+
+            # === Send zero velocity on switch ===
+            zero_twist = Twist()
+            zero_twist.linear.x = 0.0
+            zero_twist.angular.z = 0.0
+            self.cmd_vel_pub.publish(zero_twist)
+            self.puzzlebot_cmd_vel_pub.publish(zero_twist)
+
+            # Also reset previous values so ramping starts from 0
+            self.prev_linear = 0.0
+            self.prev_angular = 0.0
         else:
             response.success = False
             response.message = "Invalid source. Valid options: 'teleop', 'ik', 'line'."
             self.get_logger().warn(response.message)
         return response
+
 
     def ramp_velocity(self, current, target, dt, max_accel):
         delta = target - current

@@ -307,6 +307,17 @@ Trajectory Commander - Menu:
             # Deactivate
             self.line_follow_msg.data = 0
             self.line_follow_pub.publish(self.line_follow_msg)
+            req = SwitchPublisher.Request()
+            req.active_source = 'teleop'
+            future = self.switch_cmd_cli.call_async(req)
+            while not future.done() and rclpy.ok():
+                rclpy.spin_once(self, timeout_sec=0.1)
+            try:
+                result = future.result()
+                print(f"Switched control to teleop! ✅")
+            except Exception as e:
+                print(f"Failed to switch mode: {e}")
+
             print("🛑 Line follower deactivated")
         else:
             # Step 1: Switch command source to 'line'

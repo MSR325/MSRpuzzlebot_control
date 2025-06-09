@@ -9,6 +9,7 @@
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
+  <depend>vision_msgs</depend>
   <depend>ros2launch</depend>
   <depend>custom_interfaces</depend>
 

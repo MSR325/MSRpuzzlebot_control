@@ -171,10 +171,10 @@ def generate_launch_description():
         output='screen'
     )
 
-    undistort_image_node = Node(
-        name='undistort_image',
+    undistort_frames_node = Node(
+        name='undistort_frames',
         package='msr_camera_calibration',
-        executable='undistort_image',
+        executable='undistort_frames',
         emulate_tty=True,
         output='screen'
     )
@@ -234,6 +234,6 @@ def generate_launch_description():
         path_generator_node,
         static_tf_pub_node,
         pose_saver_node,
-        undistort_image_node,
+        undistort_frames_node,
         crossroad_detection_node
     ])

@@ -5,7 +5,8 @@ from cv_bridge import CvBridge
 import cv2
 import numpy as np
 from std_msgs.msg import Int32MultiArray, Int16
-
+from ament_index_python.packages import get_package_share_directory
+from pathlib import Path
 '''
 ESTE NODO VE A PARTIR DE 15 cm efrente del robot y termina de ver a los 15 + 26.4 cm aprox (alto)
 (ancho) aprox 30 cm de lado a lado
@@ -19,7 +20,7 @@ class CrossroadDetector(Node):
         self.active_crossroad_detection = 0
 
         # Parameters
-        self.declare_parameter('homography_matrix_path', 'src/line_follow_msr/data/homography_after_calib_firstsegment_decent.npy')
+        self.declare_parameter('homography_matrix_path', 'data/homography_after_calib_firstsegment_decent.npy')
         self.declare_parameter('warp_width', 300)
         self.declare_parameter('warp_height', 300)
         self.declare_parameter('min_segments', 4)
@@ -37,11 +38,13 @@ class CrossroadDetector(Node):
 
         # Load homography
         try:
-            path = self.get_parameter('homography_matrix_path').value
+            pkg_share = get_package_share_directory('line_follow_msr')
+            rel_path = self.get_parameter('homography_matrix_path').value
+            path = str((Path(pkg_share) / rel_path).resolve())
             self.homography_matrix = np.load(path)
-            self.get_logger().info('✅ Homography matrix loaded')
+            self.get_logger().info(f'✅ Homography matrix loaded from: {path}')
         except Exception as e:
-            self.get_logger().error(f'Failed to load homography: {e}')
+            self.get_logger().error(f'❌ Failed to load homography: {e}')
 
         # Subscribers
         self.crossroad_detect_enable_sub = self.create_subscription(Int16, '/crossroad_detect_enable', self.enable_callback, 10)
@@ -53,41 +56,70 @@ class CrossroadDetector(Node):
         self.flags_pub = self.create_publisher(Int32MultiArray, '/crossroad_detected', 10)
         self.centroids_pub = self.create_publisher(Int32MultiArray, '/crossroad_centroids', 10)
 
-        # Trackbars
+        self.windows_open = False
+        
+    def enable_callback(self, msg: Int16):
+        self.active_crossroad_detection = msg.data
+        state = "✅ ENABLED" if msg.data == 1 else "⛔ DISABLED"
+        self.get_logger().info(f"Crossroad detection is now {state}")
+
+        if msg.data == 1:
+            self.create_control_window()
+        else:
+            self.destroy_control_window()
+
+    def safe_get(self, name, default):
+        try:
+            return cv2.getTrackbarPos(name, 'Controls')
+        except cv2.error:
+            return default
+
+    def destroy_control_window(self):
+        """Closes all OpenCV GUI windows used by the node."""
+        if self.windows_open:
+            window_names = [
+                'Controls',
+                'Crossroad Debug'
+            ]
+            for name in window_names:
+                try:
+                    cv2.destroyWindow(name)
+                except Exception:
+                    pass
+            cv2.waitKey(1)  # Flush GUI event queue
+            self.windows_open = False
+            self.get_logger().info("🧼 All OpenCV windows destroyed.")
+
+
+
+    def create_control_window(self):
+        if self.windows_open:
+            return  # already open
+
         cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
         cv2.createTrackbar('Blur Kernel', 'Controls', 28, 31, lambda x: None)
         cv2.createTrackbar('Morph Kernel', 'Controls', 10, 31, lambda x: None)
         cv2.createTrackbar('Block Size', 'Controls', 97, 201, lambda x: None)
         cv2.createTrackbar('C (Bias)', 'Controls', 16, 30, lambda x: None)
-        # Horizontal aspect (X-direction alignment)
         cv2.createTrackbar('Min Aspect X x10', 'Controls', 8, 100, lambda x: None)
         cv2.createTrackbar('Max Aspect X x10', 'Controls', 30, 100, lambda x: None)
-
-        # Vertical aspect (Y-direction alignment)
         cv2.createTrackbar('Min Aspect Y x10', 'Controls', 4, 100, lambda x: None)
         cv2.createTrackbar('Max Aspect Y x10', 'Controls', 7, 100, lambda x: None)
-
         cv2.createTrackbar('Min Segments', 'Controls', int(self.min_segments), 8, lambda x: None)
         cv2.createTrackbar('Horizontal ang Thrshld', 'Controls', 20, 90, lambda x: None)
         cv2.createTrackbar('Y Align Threshold', 'Controls', int(self.y_alignment_thresh_px), 200, lambda x: None)
-
         cv2.createTrackbar('Vertical ang Thrshld', 'Controls', int(self.vertical_angle_thresh), 90, lambda x: None)
         cv2.createTrackbar('X Align Threshold', 'Controls', 40, 200, lambda x: None)
-
         cv2.createTrackbar('Min Width', 'Controls', 2, 300, lambda x: None)
         cv2.createTrackbar('Max Width', 'Controls', 115, 300, lambda x: None)
         cv2.createTrackbar('Min Height', 'Controls', 25, 300, lambda x: None)
         cv2.createTrackbar('Max Height', 'Controls', 89, 300, lambda x: None)
         cv2.createTrackbar('Min Area', 'Controls', 756, 5000, lambda x: None)
         cv2.createTrackbar('Max Area', 'Controls', 1781, 10000, lambda x: None)
-
-        cv2.createTrackbar('Residual px', 'Controls', 5, 20, lambda x: None)  # new, default 5 px
+        cv2.createTrackbar('Residual px', 'Controls', 5, 20, lambda x: None)
         cv2.createTrackbar('Scale', 'Controls', 2, 10, lambda x: None)
-        
-    def enable_callback(self, msg: Int16):
-        self.active_crossroad_detection = msg.data
-        state = "✅ ENABLED" if msg.data == 1 else "⛔ DISABLED"
-        self.get_logger().info(f"Crossroad detection is now {state}")
+
+        self.windows_open = True
 
 
     # ---------------------------------------------------------------------------
@@ -121,38 +153,37 @@ class CrossroadDetector(Node):
     # 1.  🔧  Track-bar caching ­– read once per frame
     # ---------------------------------------------------------------------------
     def _snapshot_trackbar_state(self):
-        """Read every track-bar exactly once and return a dict."""
-        g = cv2.getTrackbarPos      # local alias (tiny speed win)
         d = {}
 
-        # ---- Pre-processing knobs ----
-        d['blur_k']   = max(1, g('Blur Kernel',  'Controls') | 1)
-        d['morph_k']  = max(1, g('Morph Kernel', 'Controls') | 1)
-        d['block_sz'] = max(3, g('Block Size',   'Controls') | 1)
-        d['c_bias']   = g('C (Bias)',            'Controls')
+        # ——— Preprocessing ———
+        d['blur_k']   = max(1, self.safe_get('Blur Kernel', 28) | 1)
+        d['morph_k']  = max(1, self.safe_get('Morph Kernel', 10) | 1)
+        d['block_sz'] = max(3, self.safe_get('Block Size', 97) | 1)
+        d['c_bias']   = self.safe_get('C (Bias)', 16)
 
-        # ---- Contour geometry ----
-        d['min_w']      = g('Min Width',  'Controls')
-        d['max_w']      = g('Max Width',  'Controls')
-        d['min_h']      = g('Min Height', 'Controls')
-        d['max_h']      = g('Max Height', 'Controls')
-        d['area_min']   = g('Min Area',   'Controls')
-        d['area_max']   = g('Max Area',   'Controls')
+        # ——— Contour Geometry ———
+        d['min_w']    = self.safe_get('Min Width', 2)
+        d['max_w']    = self.safe_get('Max Width', 115)
+        d['min_h']    = self.safe_get('Min Height', 25)
+        d['max_h']    = self.safe_get('Max Height', 89)
+        d['area_min'] = self.safe_get('Min Area', 756)
+        d['area_max'] = self.safe_get('Max Area', 1781)
 
-        # ---- Aspect ratios ----
-        d['aspect_min_x'] = g('Min Aspect X x10', 'Controls') / 10.0
-        d['aspect_max_x'] = g('Max Aspect X x10', 'Controls') / 10.0
-        d['aspect_min_y'] = g('Min Aspect Y x10', 'Controls') / 10.0
-        d['aspect_max_y'] = g('Max Aspect Y x10', 'Controls') / 10.0
+        # ——— Aspect Ratios ———
+        d['aspect_min_x'] = self.safe_get('Min Aspect X x10', 8) / 10.0
+        d['aspect_max_x'] = self.safe_get('Max Aspect X x10', 30) / 10.0
+        d['aspect_min_y'] = self.safe_get('Min Aspect Y x10', 4) / 10.0
+        d['aspect_max_y'] = self.safe_get('Max Aspect Y x10', 7) / 10.0
 
-        # ---- Alignment / angle thresholds ----
-        d['y_align']    = g('Y Align Threshold',  'Controls')
-        d['x_align']    = g('X Align Threshold',  'Controls')
-        d['ang_thr_h']  = g('Horizontal ang Thrshld', 'Controls')
-        d['ang_thr_v']  = g('Vertical ang Thrshld',   'Controls')
-        d['min_segments'] = g('Min Segments', 'Controls')
+        # ——— Alignment / Angles ———
+        d['y_align']      = self.safe_get('Y Align Threshold', 100)
+        d['x_align']      = self.safe_get('X Align Threshold', 40)
+        d['ang_thr_h']    = self.safe_get('Horizontal ang Thrshld', 20)
+        d['ang_thr_v']    = self.safe_get('Vertical ang Thrshld', 20)
+        d['min_segments'] = self.safe_get('Min Segments', self.min_segments)
 
         return d
+
 
     def is_dotted_row(self, binary_roi, overlay, roi_offset_y, tb):
         contours, _ = cv2.findContours(binary_roi, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -199,7 +230,7 @@ class CrossroadDetector(Node):
         pts = np.float32([(p['cx'], p['cy']) for p in valid])
         vx, vy, x0, y0 = cv2.fitLine(pts, cv2.DIST_L2, 0, 0.01, 0.01)
 
-        res_px = cv2.getTrackbarPos('Residual px', 'Controls')
+        res_px = self.safe_get('Residual px', 5)  
         keep = []
         for p in valid:
             # distance from point to line = |(vy)*(x - x0) - (vx)*(y - y0)|
@@ -391,7 +422,7 @@ class CrossroadDetector(Node):
             self.get_logger().info(f"🚦 Centro del cruce (aprox): {cross_center}")
 
         # --- Show image ---
-        scale = 1.0 + max(1, cv2.getTrackbarPos('Scale', 'Controls') | 1) / 10.0
+        scale = 1.0 + max(1, self.safe_get('Scale', 2) | 1) / 10.0
         cv2.imshow("Crossroad Debug", cv2.resize(warped, None, fx=scale, fy=scale))
         cv2.waitKey(1)
 

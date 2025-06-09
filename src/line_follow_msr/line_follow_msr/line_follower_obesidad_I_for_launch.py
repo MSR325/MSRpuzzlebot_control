@@ -9,7 +9,8 @@ from geometry_msgs.msg import Twist
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
-
+from ament_index_python.packages import get_package_share_directory
+from pathlib import Path
 
 class LineFollowerCentroid(Node):
     """
@@ -41,7 +42,7 @@ class LineFollowerCentroid(Node):
 
         # Homografía (BEV)
         self.declare_parameter('homography_matrix_path',
-            'src/line_follow_msr/data/homography3.npy')
+            'data/homography3.npy')
         self.declare_parameter('warp_width',       200)
         self.declare_parameter('warp_height',      200)
 
@@ -89,11 +90,14 @@ class LineFollowerCentroid(Node):
         self.selecting_points  = False
         self.src_points        = []
         try:
-            self.homography_matrix = np.load(homography_path)
-            self.get_logger().info('✅ Homography matrix loaded from file')
-        except Exception:
-            self.get_logger().warn('❌ Homography file not found. Activando selección manual.')
-            self.selecting_points = True
+            pkg_share = get_package_share_directory('line_follow_msr')
+            rel_path = self.get_parameter('homography_matrix_path').value
+            path = str((Path(pkg_share) / rel_path).resolve())
+            self.homography_matrix = np.load(path)
+            self.get_logger().info(f'✅ Homography matrix loaded from: {path}')
+        except Exception as e:
+            self.get_logger().error(f'❌ Failed to load homography: {e}')
+
 
         # ————— Publicadores y suscriptores ——————
         self.publisher = self.create_publisher(Twist, '/line_cmd_vel', 10)
@@ -103,13 +107,24 @@ class LineFollowerCentroid(Node):
         self.active_line = 0
         self.windows_open = False
 
+        self.trackbar_defaults = {
+            'Blur Kernel':    24,
+            'Morph Kernel':   5,
+            'Block Size':     76,
+            'C (Bias)':       13,
+            'Min Area':       self.min_area_param
+        }
+
+
         # ————— Ventana de trackbars (parámetros de visión) ——————
-        cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
-        cv2.createTrackbar('Blur Kernel', 'Controls', 24, 31, lambda x: None)
-        cv2.createTrackbar('Morph Kernel', 'Controls', 5, 51, lambda x: None)
-        cv2.createTrackbar('Block Size', 'Controls', 76, 101, lambda x: None)
-        cv2.createTrackbar('C (Bias)', 'Controls', 13, 50, lambda x: None)
-        cv2.createTrackbar('Min Area', 'Controls', self.min_area_param, 2000, lambda x: None)
+        if (self.active_line):
+            cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
+            cv2.createTrackbar('Blur Kernel', 'Controls', self.trackbar_defaults['Blur Kernel'], 31, lambda x: None)
+            cv2.createTrackbar('Morph Kernel', 'Controls', self.trackbar_defaults['Morph Kernel'], 51, lambda x: None)
+            cv2.createTrackbar('Block Size', 'Controls', self.trackbar_defaults['Block Size'], 101, lambda x: None)
+            cv2.createTrackbar('C (Bias)', 'Controls', self.trackbar_defaults['C (Bias)'], 50, lambda x: None)
+            cv2.createTrackbar('Min Area', 'Controls', self.trackbar_defaults['Min Area'], 2000, lambda x: None)
+
 
         # Timer a 50 Hz para percepción + control
         timer_period = 1.0 / 50.0
@@ -120,6 +135,34 @@ class LineFollowerCentroid(Node):
     def activate_line_follow_callback(self, msg):
         self.active_line = msg.data
         self.get_logger().info(f"line follow node state: {self.active_line}")
+
+        if self.active_line:
+            self.create_control_window()
+        else:
+            self.destroy_control_window()
+
+    def create_control_window(self):
+        if not self.windows_open:
+            cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
+            cv2.createTrackbar('Blur Kernel', 'Controls', 24, 31, lambda x: None)
+            cv2.createTrackbar('Morph Kernel', 'Controls', 5, 51, lambda x: None)
+            cv2.createTrackbar('Block Size', 'Controls', 76, 101, lambda x: None)
+            cv2.createTrackbar('C (Bias)', 'Controls', 13, 50, lambda x: None)
+            cv2.createTrackbar('Min Area', 'Controls', self.min_area_param, 2000, lambda x: None)
+            self.windows_open = True
+            self.get_logger().info("🎛️ Trackbars created.")
+
+    def destroy_control_window(self):
+        if self.windows_open:
+            for win in ['Controls', 'Overlay', 'Left | Middle | Right', 'ROI']:
+                try:
+                    cv2.destroyWindow(win)
+                except Exception:
+                    pass
+            cv2.waitKey(1)  # Let OpenCV flush pending GUI events
+            self.windows_open = False
+            self.get_logger().info("❌ All OpenCV windows closed.")
+
 
     def parameter_update_callback(self, params):
         """Actualiza parámetros dinámicos en tiempo real (con try/except para no morir)."""
@@ -164,7 +207,7 @@ class LineFollowerCentroid(Node):
     def fsm_action_callback(self, msg: Float32):
         """Permite variar el multiplicador de velocidad desde un FSM externo."""
         self.color_flag_multiplier = msg.data
-        self.get_logger().info(f"Updated color_flag_multiplier to: {self.color_flag_multiplier}")
+        # self.get_logger().info(f"Updated color_flag_multiplier to: {self.color_flag_multiplier}")
 
     def image_callback(self, msg: Image):
         """Guarda la última imagen recibida para procesarla en timer_callback."""
@@ -219,11 +262,11 @@ class LineFollowerCentroid(Node):
         roi_right    = warped[:, 7 * twelve_div : ]
 
         # ————— Lectura de trackbars —————
-        blur_k      = max(1, cv2.getTrackbarPos('Blur Kernel', 'Controls') | 1)
-        morph_k     = max(1, cv2.getTrackbarPos('Morph Kernel', 'Controls') | 1)
-        block_size  = max(3, cv2.getTrackbarPos('Block Size', 'Controls') | 1)
-        c_bias      = cv2.getTrackbarPos('C (Bias)', 'Controls')
-        min_area_tb = cv2.getTrackbarPos('Min Area', 'Controls')
+        blur_k = max(1, self.safe_get_trackbar('Blur Kernel', 'Controls') | 1)
+        morph_k = max(1, self.safe_get_trackbar('Morph Kernel', 'Controls') | 1)
+        block_size = max(3, self.safe_get_trackbar('Block Size', 'Controls') | 1)
+        c_bias = self.safe_get_trackbar('C (Bias)', 'Controls')
+        min_area_tb = self.safe_get_trackbar('Min Area', 'Controls')
         min_area    = max(self.min_area_param, min_area_tb)
 
         # ————— Preprocesado para cada ROI —————
@@ -324,9 +367,12 @@ class LineFollowerCentroid(Node):
                 # Si es M, actualizo last_center_x
                 self.last_center_x = float(chosen_line["x_global"])
             # Si es L o R, dejo last_center_x igual (para forzar re-búsqueda de M real)
-
+        
         # ————— Control P sobre la chosen_line o fallback completo —————
         if chosen_line is not None:
+            linear_speed = 0.0
+            angular_speed = 0.0
+
             x_error   = chosen_line["x_global"] - center_frame_x
             theta     = chosen_line["angle"]
             if theta > 0:
@@ -348,11 +394,11 @@ class LineFollowerCentroid(Node):
             twist.angular.z = angular_speed * self.color_flag_multiplier
             if (self.active_line):
                 self.publisher.publish(twist)
-
-            self.get_logger().info(
-                f"[{chosen_label}] x_err={x_error:.1f}, ang_err={angle_error:.1f}, "
-                f"v={linear_speed:.3f}, ω={angular_speed:.3f}"
-            )
+            
+            # self.get_logger().info(
+            #     f"[{chosen_label}] x_err={x_error:.1f}, ang_err={angle_error:.1f}, "
+            #     f"v={linear_speed:.3f}, ω={angular_speed:.3f}"
+            # )
         else:
             # Fallback total: retroceder suavemente
             twist = Twist()
@@ -415,6 +461,12 @@ class LineFollowerCentroid(Node):
             "contour":  largest
         }
 
+    def safe_get_trackbar(self, name, window):
+        try:
+            return cv2.getTrackbarPos(name, window)
+        except cv2.error:
+            return self.trackbar_defaults.get(name, 0)  # fallback if missing from dict
+
 
 def select_points(event, x, y, flags, param):
     """
@@ -454,8 +506,6 @@ def stack_with_dividers(imgs, divider_thickness=3, divider_color=255):
 def main(args=None):
     rclpy.init(args=args)
     node = LineFollowerCentroid()
-    cv2.namedWindow("ROI")
-    cv2.setMouseCallback("ROI", select_points, node)
     try:
         rclpy.spin(node)
     finally:
