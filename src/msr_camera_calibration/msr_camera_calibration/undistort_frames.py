@@ -4,22 +4,31 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
+from ament_index_python.packages import get_package_share_directory
 import os
+from pathlib import Path
+
 
 class UndistortNode(Node):
     def __init__(self):
         super().__init__('undistort_node')
 
         # === Load camera parameters ===
-        calib_path = 'src/msr_camera_calibration/data/calibration_data/calibration_data2.npz'
-        if not os.path.exists(calib_path):
-            self.get_logger().error(f"❌ Calibration file not found: {calib_path}")
-            rclpy.shutdown()
-            return
+        self.declare_parameter('homography_matrix_path', 'data/calibration_data/calibration_data2.npz')
+        self.homography_matrix = None
+        # Load homography
+        try:
+            pkg_share = get_package_share_directory('msr_camera_calibration')
+            rel_path = self.get_parameter('homography_matrix_path').value
+            path = str((Path(pkg_share) / rel_path).resolve())
+            print(path)
+            self.homography_matrix = np.load(path)
+            self.get_logger().info(f'✅ Homography matrix loaded from: {path}')
+        except Exception as e:
+            self.get_logger().error(f'❌ Failed to load homography: {e}')
 
-        data = np.load(calib_path)
-        self.K = data['K']
-        self.dist = data['dist']
+        self.K = self.homography_matrix['K']
+        self.dist = self.homography_matrix['dist']
         self.get_logger().info("📦 Calibration parameters loaded")
 
         # === Image bridge and subscriptions ===
