@@ -11,7 +11,12 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools'],
+    install_requires=[  
+        'setuptools',
+        'numpy',
+        'opencv-python',
+        'cv_bridge',
+        ],
     zip_safe=True,
     maintainer='idmx',
     maintainer_email='a00227388@tec.mx',
@@ -20,6 +25,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'yolo_map_event = msr_detection.yolo_map_event:main',
         ],
     },
 )
