@@ -413,14 +413,14 @@ class CrossroadDetector(Node):
         self.centroids_pub.publish(Int32MultiArray(data=[Hx, Hy, Lx, Ly, Rx, Ry]))
 
         # --- Logging ---
-        if found_h:
-            self.get_logger().info("🚦 CROSSROAD DETECTED by horizontal dotted line!")
-        if found_left:
-            self.get_logger().info("🚦 CROSSROAD DETECTED by vertical LEFT dotted line!")
-        if found_right:
-            self.get_logger().info("🚦 CROSSROAD DETECTED by vertical RIGHT dotted line!")
-        if found_h and (found_left or found_right):
-            self.get_logger().info("🚦 FULL CROSSROAD (T or X) DETECTED!")
+        # if found_h:
+        #     self.get_logger().info("🚦 CROSSROAD DETECTED by horizontal dotted line!")
+        # if found_left:
+        #     self.get_logger().info("🚦 CROSSROAD DETECTED by vertical LEFT dotted line!")
+        # if found_right:
+        #     self.get_logger().info("🚦 CROSSROAD DETECTED by vertical RIGHT dotted line!")
+        # if found_h and (found_left or found_right):
+        #     self.get_logger().info("🚦 FULL CROSSROAD (T or X) DETECTED!")
 
         # --- Overlay text ---
         messages = [

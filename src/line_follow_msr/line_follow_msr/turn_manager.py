@@ -23,7 +23,8 @@ class TurnManager(Node):
     def __init__(self):
         super().__init__('turn_manager')
 
-        self._once_timer
+        self._once_timer = None
+
 
         # ---------- ROI warp (300×300 px) y escala física ----------
         self.warp_w          = 300          # px
