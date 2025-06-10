@@ -94,7 +94,7 @@ class TurnManager(Node):
         elif self.current_event == 'LEFT_TURN':
             if Lx >= 9999: return
             px_w, py_w = Lx, Ly
-        else:  # RIGHT_TURN
+        elif self.current_event == 'RIGHT_TURN':
             if Rx >= 9999: return
             px_w, py_w = Rx, Ry
 
