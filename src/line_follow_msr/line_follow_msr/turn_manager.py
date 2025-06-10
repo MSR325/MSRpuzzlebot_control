@@ -16,15 +16,11 @@ from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Int16  # for enable_line_follow
-from threading import Timer
 
 
 class TurnManager(Node):
     def __init__(self):
         super().__init__('turn_manager')
-
-        self._once_timer = None
-
 
         # ---------- ROI warp (300×300 px) y escala física ----------
         self.warp_w          = 300          # px
@@ -146,38 +142,23 @@ class TurnManager(Node):
                                                       target_y = x_lat,
                                                       event    = self.current_event)
         self.get_logger().info("🕒 Esperando 1.5 segundos antes de ejecutar la curva...")
-        self.processing = True  # Mark as started
-        if self._once_timer is not None:
-            self._once_timer.cancel()
-
-        self._once_timer = self.create_timer(
-            1.5, self._start_trajectory_once
-        )
-
+        self.create_timer(1.5, self._start_trajectory_once, callback_group=None)
+        self.processing = True
         self._centroid_buffer.clear()
 
     def _start_trajectory_once(self):
-        self.get_logger().warn("🔥 Timer fired → starting trajectory")
-
-        if self._once_timer is not None:
-            self._once_timer.cancel()
-            self._once_timer = None
-
-        if not self.processing or self.processing == 'started':
-            self.get_logger().warn("🚫 Skipping: already processed or invalid state")
-            return
-
-        if not self.current_waypoints:
-            self.get_logger().error("❌ No waypoints to publish!")
-            return
-
+        if not self.processing:
+            return  # already canceled or reset
+        
+            # ❌ Desactiva el seguidor de línea
         self.enable_pub.publish(Int16(data=0))
+        
         self.publish_path()
         self.call_switch('ik')
         self.get_logger().info("🚀 Trayectoria activada después del retraso")
+        
+        # prevent multiple timer firings (ROS2 doesn't guarantee oneshot behavior by default)
         self.processing = 'started'
-
-
 
 
     # --------------------------------------------------  IMAGE DEBUG
