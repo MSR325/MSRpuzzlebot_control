@@ -19,9 +19,9 @@ class PathFollower(Node):
 
         # ---------------- parámetros dinámicos ----------------
         self.declare_parameter('lookahead',      0.05)   # m
-        self.declare_parameter('v_ref',          0.175)  # m/s
-        self.declare_parameter('v_max',          0.50)   # m/s
-        self.declare_parameter('w_max',          4.00)   # rad/s
+        self.declare_parameter('v_ref',          0.1)  # m/s
+        self.declare_parameter('v_max',          0.2)   # m/s
+        self.declare_parameter('w_max',          0.50)   # rad/s
         self.declare_parameter('arrival_tol',    0.02)   # m
 
         self._sync_params()
@@ -36,7 +36,7 @@ class PathFollower(Node):
                                   self._path_cb,   10)
         self.create_subscription(Odometry, '/odom',
                                   self._odom_cb,   40)
-        self.cmd_pub  = self.create_publisher(Twist, 'cmd_vel', 10)
+        self.cmd_pub  = self.create_publisher(Twist, 'ik_cmd_vel', 10)
         self.done_pub = self.create_publisher(Bool,  'completed_curve', 10)
 
         # ---------------- loop 100 Hz ----------------

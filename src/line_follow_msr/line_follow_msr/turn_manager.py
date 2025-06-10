@@ -31,7 +31,7 @@ class TurnManager(Node):
         self.declare_parameter('waypoint_count',    5)
         self.declare_parameter('arrival_tolerance', 0.02)
         self.declare_parameter('flip_warp_x', False)
-        self.declare_parameter('flip_warp_y', True)
+        self.declare_parameter('flip_warp_y', False)
 
         rel_path = self.get_parameter('homography_matrix_path').value
         pkg_share = get_package_share_directory('line_follow_msr')
