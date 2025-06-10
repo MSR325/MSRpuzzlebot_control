@@ -11,8 +11,8 @@ def generate_launch_description():
 
     odom_node = Node(
         name='odometry',
-        package='motor_control',
-        executable='odometry',
+        package='msr_simulation',
+        executable='simulation_odometry',
         emulate_tty=True,
         output='screen',
         parameters=[{
@@ -93,7 +93,7 @@ def generate_launch_description():
         emulate_tty=True,
         output='screen'
     )
-    
+
     crossroad_detection_node = Node(
         name='crossroad_detection_node',
         package='line_follow_msr',
@@ -112,40 +112,6 @@ def generate_launch_description():
         )
     )
 
-    yolo_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory('msrsigndet'),
-                'launch',
-                'pc.launch.py'
-            )
-        )
-    )
-
-    yolo_map_event = Node(
-        name='yolo_map_event',
-        package='msr_detection',
-        executable='yolo_map_event',
-        emulate_tty=True,
-        output='screen'
-    )
-
-    turn_manager_node = Node(
-        name='turn_manager_node',
-        package='line_follow_msr',
-        executable='turn_manager',
-        emulate_tty=True,
-        output='screen'
-    )
-
-    curve_control_node = Node(
-        name='curve_control_node',
-        package='motor_control',
-        executable='curve_control',
-        emulate_tty=True,
-        output='screen'
-    )
-
     open_tmux_terminals = ExecuteProcess(
         cmd=[
             'gnome-terminal',
@@ -160,11 +126,27 @@ def generate_launch_description():
         shell=False
     )
 
+    yolo_map_event = Node(
+        name='yolo_map_event',
+        package='msr_detection',
+        executable='yolo_map_event',
+        emulate_tty=True,
+        output='screen'
+    )
+
     static_tf_pub_node = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         name='static_tf_pub_map_to_odom',
         arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom'],
+        output='screen'
+    )
+
+    pose_saver_node = Node(
+        name='pose_saver',
+        package='msr_simulation',
+        executable='pose_saver',
+        emulate_tty=True,
         output='screen'
     )
 
@@ -181,8 +163,5 @@ def generate_launch_description():
         pose_saver_node,
         undistort_frames_node,
         crossroad_detection_node,
-        yolo_launch,
         yolo_map_event,
-        turn_manager_node,
-        curve_control_node,
     ])

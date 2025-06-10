@@ -37,6 +37,7 @@ setup(
             'crossroad_detection_for_launch = line_follow_msr.crossroad_detection_for_launch:main',
             'line_follower_obesidad_II = line_follow_msr.line_follower_obesidad_II:main',
             'turn_manager_node = line_follow_msr.turn_manager_node:main',
+            'turn_manager = line_follow_msr.turn_manager:main',
         ],
     },
 )

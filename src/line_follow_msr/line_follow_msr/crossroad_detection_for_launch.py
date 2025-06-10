@@ -27,6 +27,13 @@ class CrossroadDetector(Node):
         self.declare_parameter('y_alignment_thresh_px', 100)  # vertical threshold in pixels
         self.declare_parameter('vertical_angle_thresh', 20)  # vertical threshold in pixels
 
+        # --- add parameters near the top of CrossroadDetector.__init__
+        self.declare_parameter('x_meter_range', 0.30)
+        self.declare_parameter('y_meter_range', 0.264)
+        self.x_meter_range = self.get_parameter('x_meter_range').value
+        self.y_meter_range = self.get_parameter('y_meter_range').value
+
+
         self.min_segments = self.get_parameter('min_segments').value
         self.y_alignment_thresh_px = self.get_parameter('y_alignment_thresh_px').value
         self.vertical_angle_thresh = self.get_parameter('vertical_angle_thresh').value
@@ -214,11 +221,11 @@ class CrossroadDetector(Node):
             valid.append({'cx': cx, 'cy': cy, 'rect': (x, y, w, h)})
 
         if len(valid) < tb['min_segments'] - 1:
-            return False, None
+            return False, None, (0.0, 0.0)
 
         ys = np.array([p['cy'] for p in valid])
         if ys.ptp() > tb['y_align']:
-            return False, None
+            return False, None, (0.0, 0.0)
 
         # Decide horizontal counting direction
         if self.crossroad_decision == 2:          # turn-left → count left→right
@@ -239,14 +246,14 @@ class CrossroadDetector(Node):
                 keep.append(p)
         valid = keep
         if len(valid) < tb['min_segments'] - 1:
-            return False, None
+            return False, None, (0.0, 0.0)
         # refit after pruning
         pts = np.float32([(p['cx'], p['cy']) for p in valid])
         vx, vy, x0, y0 = cv2.fitLine(pts, cv2.DIST_L2, 0, 0.01, 0.01)
 
         angle = abs(np.degrees(np.arctan2(vy, vx)))
         if angle > tb['ang_thr_h']:
-            return False, None
+            return False, None, (0.0, 0.0)
 
         for p in valid:
             p['vx'] = vx[0]
@@ -260,7 +267,7 @@ class CrossroadDetector(Node):
         pt2 = (int(x0 + vx * 100), int(y0 + vy * 100))
         cv2.line(overlay, pt1, pt2, (0, 255, 0), 1)
 
-        return True, center_pt
+        return True, center_pt, (vx[0], vy[0])
 
     def is_dotted_column(self, binary_roi, overlay, roi_offset_x, tb):
         contours, _ = cv2.findContours(binary_roi, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -372,20 +379,37 @@ class CrossroadDetector(Node):
         mid_x = w // 2
 
         # --- Line detection ---
-        found_h, center_h = self.is_dotted_row(binary, warped, roi_offset_y=0, tb=tb)
+        found_h, center_h, h_vec = self.is_dotted_row(binary, warped, roi_offset_y=0, tb=tb)
         found_left, center_left = self.is_dotted_column(binary[:, :mid_x], warped, roi_offset_x=0, tb=tb)
         found_right, center_right = self.is_dotted_column(binary[:, mid_x:], warped, roi_offset_x=mid_x, tb=tb)
+
+        # ----- fabricate missing side centroid if needed -----
+        Lx = Ly = Rx = Ry = 9999           # defaults
+        if found_h:
+            Hx, Hy = center_h
+            # copy existing detections first
+            if found_left:
+                Lx, Ly = center_left
+            if found_right:
+                Rx, Ry = center_right
+
+            # need LEFT ?
+            if self.crossroad_decision == 2 and not found_left:
+                Lx, Ly = self._estimate_side(center_h, h_vec, 'left')
+                cv2.circle(warped, (Lx, Ly), 5, (255, 128, 0), -1)  # orange = estimated left
+                found_left = True
+            # need RIGHT ?
+            if self.crossroad_decision == 1 and not found_right:
+                Rx, Ry = self._estimate_side(center_h, h_vec, 'right')
+                cv2.circle(warped, (Rx, Ry), 5, (255, 0, 128), -1)  # pink = estimated right
+                found_right = True
+        else:
+            Hx = Hy = 9999    # keep interface identical
 
         # --- Detection flags ---
         flags = [int(found_h), int(found_left), int(found_right)]
         self.flags_pub.publish(Int32MultiArray(data=flags))
-
-        # --- Centroid publishing ---
-        if any(flags):
-            Hx, Hy = self._remap(center_h)
-            Lx, Ly = self._remap(center_left)
-            Rx, Ry = self._remap(center_right)
-            self.centroids_pub.publish(Int32MultiArray(data=[Hx, Hy, Lx, Ly, Rx, Ry]))
+        self.centroids_pub.publish(Int32MultiArray(data=[Hx, Hy, Lx, Ly, Rx, Ry]))
 
         # --- Logging ---
         if found_h:
@@ -434,6 +458,38 @@ class CrossroadDetector(Node):
     def _remap(self, pt):
         """Return centroid unchanged; only substitutes 9999 if not detected."""
         return (pt if pt is not None else (9999, 9999))
+    
+    # ---------- helper (add to the class) ----------
+    def _estimate_side(self, center_h, vec, side):
+        """
+        centre_h : (u,v) of horizontal line centre in warp px
+        vec      : (vx,vy) direction of horizontal line (not normalised)
+        side     : 'left'  or 'right'
+        Returns  : (est_u, est_v) in warp px
+        """
+        vx, vy = vec
+        norm = math.hypot(vx, vy)
+        if norm == 0:                       # degenerate
+            return (9999, 9999)
+
+        fwd   = np.array([vx, vy]) / norm          # direction ALONG the horizontal dash row
+        left  = np.array([-vy, vx]) / norm         # 90° CCW
+
+        # offsets in metres (positive forward, +left / -right)
+        offset_m = 0.15 * fwd + 0.15 * ( left if side == 'left' else -left )
+
+        # convert to pixels (warp frame: u = x-axis, v = y-axis downwards)
+        du = offset_m[0] * self.warp_size[0] / self.x_meter_range
+        dv = offset_m[1] * self.warp_size[1] / self.y_meter_range
+
+        est_u = int(center_h[0] + du)
+        est_v = int(center_h[1] + dv)
+
+        # clip to image bounds
+        est_u = max(0, min(self.warp_size[0]-1, est_u))
+        est_v = max(0, min(self.warp_size[1]-1, est_v))
+        return (est_u, est_v)
+
 
 
 def main(args=None):
