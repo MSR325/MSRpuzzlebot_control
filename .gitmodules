@@ -1,0 +1,3 @@
+[submodule "src/msrsigndet"]
+	path = src/msrsigndet
+	url = https://github.com/MSR325/msrsigndet.git
