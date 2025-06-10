@@ -2,7 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Int32MultiArray, Bool
-from nav_msgs.msg import Path
+from nav_msgs.msg import Path as PathMsg
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Image
 from nav_msgs.msg import Odometry
@@ -74,7 +74,7 @@ class TurnManager(Node):
         self.bridge = CvBridge()
         self.create_subscription(Image,          '/image_raw',            self.image_cb, sensor_qos)
 
-        self.wp_pub  = self.create_publisher(Path,  '/turn_manager/waypoints', 10)
+        self.wp_pub  = self.create_publisher(PathMsg,  '/turn_manager/waypoints', 10)
         self.img_pub = self.create_publisher(Image, '/turn_manager/debug_image', 10)
 
         self.cli = self.create_client(SwitchPublisher, 'switch_cmd_source')
@@ -217,7 +217,7 @@ class TurnManager(Node):
 
     # --------------------------------------------------  PUBLICAR PATH
     def publish_path(self):
-        path = Path()
+        path = PathMsg()
         path.header.frame_id = 'odom'
         path.header.stamp    = self.get_clock().now().to_msg()
         path.poses           = self.current_waypoints

@@ -27,7 +27,7 @@ class TurnManager(Node):
 
         # ---------- parámetros ROS ----------
         self.declare_parameter('homography_matrix_path',
-            '/home/idmx/ros2_ws_2/install/line_follow_msr/share/'
+            '/home/idmx/msr_ws/MSRpuzzlebot_control/install/line_follow_msr/share/'
             'line_follow_msr/data/homography_after_calib_firstsegment_decent.npy')
         self.declare_parameter('waypoint_count',    5)
         self.declare_parameter('arrival_tolerance', 0.02)
