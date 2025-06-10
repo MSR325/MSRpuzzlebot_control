@@ -14,6 +14,9 @@ import numpy as np
 import math
 from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
+from geometry_msgs.msg import Twist
+from std_msgs.msg import Int16  # for enable_line_follow
+
 
 class TurnManager(Node):
     def __init__(self):
@@ -76,6 +79,8 @@ class TurnManager(Node):
 
         self.wp_pub  = self.create_publisher(PathMsg,  '/turn_manager/waypoints', 10)
         self.img_pub = self.create_publisher(Image, '/turn_manager/debug_image', 10)
+        self.vel_pub = self.create_publisher(Twist, '/ik_cmd_vel', 10)
+        self.enable_pub = self.create_publisher(Int16, '/line_follow_enable', 10)
 
         self.cli = self.create_client(SwitchPublisher, 'switch_cmd_source')
         while not self.cli.wait_for_service(timeout_sec=1.0):
@@ -136,10 +141,21 @@ class TurnManager(Node):
         self.current_waypoints = self.build_waypoints(target_x = y_fwd,
                                                       target_y = x_lat,
                                                       event    = self.current_event)
-        self.publish_path()              # publicar primero
-        self.call_switch('ik')           # luego conmutar
+        self.get_logger().info("🕒 Esperando 1.5 segundos antes de ejecutar la curva...")
+        self.create_timer(1.5, self._start_trajectory_once, callback_group=None)
         self.processing = True
         self._centroid_buffer.clear()
+
+    def _start_trajectory_once(self):
+        if not self.processing:
+            return  # already canceled or reset
+        self.publish_path()
+        self.call_switch('ik')
+        self.get_logger().info("🚀 Trayectoria activada después del retraso")
+        
+        # prevent multiple timer firings (ROS2 doesn't guarantee oneshot behavior by default)
+        self.processing = 'started'
+
 
     # --------------------------------------------------  IMAGE DEBUG
     def image_cb(self, msg: Image):
@@ -236,6 +252,12 @@ class TurnManager(Node):
             self.processing = False
             self.get_logger().info("🟢 Trayectoria completada → line follower activado")
 
+            # 🛑 Publish zero velocity to stop the robot
+            stop_twist = Twist()
+            self.vel_pub.publish(stop_twist)
+
+            # ✅ Reactivate the line follower
+            self.enable_pub.publish(Int16(data=1))
 
 # ------------------------------------------------------  MAIN
 def main(args=None):
