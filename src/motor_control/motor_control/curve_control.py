@@ -37,7 +37,7 @@ class PathFollower(Node):
         self.create_subscription(Odometry, '/odom',
                                   self._odom_cb,   40)
         self.cmd_pub  = self.create_publisher(Twist, 'ik_cmd_vel', 10)
-        self.done_pub = self.create_publisher(Bool,  'completed_curve', 10)
+        self.done_pub = self.create_publisher(Bool,  '/completed_curve', 10)
 
         # ---------------- loop 100 Hz ----------------
         self.control_timer = self.create_timer(0.01, self.control_loop)
@@ -66,7 +66,11 @@ class PathFollower(Node):
 
     # --------------------------------------------------  PURE-PURSUIT LOOP
     def control_loop(self):
-        if self.pose is None or not self.current_path:
+        if self.pose is None:
+            return
+        if not self.current_path:
+            self.cmd_pub.publish(Twist())           # stop
+            self.done_pub.publish(Bool(data=True))  # done event
             return
 
         # 1) Pose actual
@@ -75,10 +79,10 @@ class PathFollower(Node):
         yaw = self._yaw_from_quat(self.pose.orientation)
 
         # 2) Elimina WPs ya alcanzados
-        while (self.current_path and
-               self._dist_xy(self.current_path[0].pose.position, x, y)
-               < self.lookahead / 2):
-            self.current_path.pop(0)
+        if self._dist_xy(self.current_path[-1].pose.position, x, y) < self.arrival_tol:
+            self.current_path.clear()  # will trigger stop+done on next cycle
+            return
+
 
         if not self.current_path:
             # ✅ Terminado

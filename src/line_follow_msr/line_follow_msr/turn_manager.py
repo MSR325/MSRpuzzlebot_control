@@ -22,6 +22,8 @@ class TurnManager(Node):
     def __init__(self):
         super().__init__('turn_manager')
 
+        self.once_timer = None
+
         # ---------- ROI warp (300×300 px) y escala física ----------
         self.warp_w          = 300          # px
         self.warp_h          = 300          # px
@@ -79,7 +81,8 @@ class TurnManager(Node):
 
         self.wp_pub  = self.create_publisher(PathMsg,  '/turn_manager/waypoints', 10)
         self.img_pub = self.create_publisher(Image, '/turn_manager/debug_image', 10)
-        self.vel_pub = self.create_publisher(Twist, '/ik_cmd_vel', 10)
+        self.ik_vel_pub = self.create_publisher(Twist, '/ik_cmd_vel', 10)
+        self.line_vel_pub = self.create_publisher(Twist, '/line_cmd_vel', 10)
         self.enable_pub = self.create_publisher(Int16, '/line_follow_enable', 10)
 
         self.cli = self.create_client(SwitchPublisher, 'switch_cmd_source')
@@ -91,6 +94,9 @@ class TurnManager(Node):
 
     # --------------------------------------------------  CALLBACKS BÁSICOS
     def event_cb(self, msg: String):
+        if self.once_timer:
+            self.once_timer.cancel()
+            self.once_timer = None
         if msg.data != self.current_event:
             self._centroid_buffer.clear()   # brand-new manoeuvre
         self.current_event = msg.data
@@ -108,32 +114,14 @@ class TurnManager(Node):
         
         Hx, Hy, Lx, Ly, Rx, Ry = msg.data
         if self.current_event == 'FORWARD':
-            if Hx >= 9999:
-                return
+            if Hx >= 9999: return
             px_w, py_w = Hx, Hy
-
         elif self.current_event == 'LEFT_TURN':
-            if Lx >= 9999:
-                if Hx >= 9999:
-                    return  # can't estimate without horizontal line
-                # estimate LEFT from horizontal centroid
-                px_w = Hx - int(self.warp_w * self.y_offset_m / self.x_meter_range)
-                py_w = Hy + int(self.warp_h * self.y_offset_m / self.y_meter_range)
-                self.get_logger().warn("🧠 Estimando giro IZQUIERDA a partir de línea horizontal")
-            else:
-                px_w, py_w = Lx, Ly
-
+            if Lx >= 9999: return
+            px_w, py_w = Lx, Ly
         elif self.current_event == 'RIGHT_TURN':
-            if Rx >= 9999:
-                if Hx >= 9999:
-                    return  # can't estimate without horizontal line
-                # estimate RIGHT from horizontal centroid
-                px_w = Hx + int(self.warp_w * self.y_offset_m / self.x_meter_range)
-                py_w = Hy + int(self.warp_h * self.y_offset_m / self.y_meter_range)
-                self.get_logger().warn("🧠 Estimando giro DERECHA a partir de línea horizontal")
-            else:
-                px_w, py_w = Rx, Ry
-
+            if Rx >= 9999: return
+            px_w, py_w = Rx, Ry
 
         # ---------- aplicar flips coherentes ----------
         if self.flip_x:
@@ -160,23 +148,27 @@ class TurnManager(Node):
                                                       target_y = x_lat,
                                                       event    = self.current_event)
         self.get_logger().info("🕒 Esperando 1.5 segundos antes de ejecutar la curva...")
-        self.create_timer(1.5, self._start_trajectory_once, callback_group=None)
+        self.once_timer = self.create_timer(1.5, self._start_trajectory_once_once)
+
         self.processing = True
         self._centroid_buffer.clear()
 
-    def _start_trajectory_once(self):
+    def _start_trajectory_once_once(self):
         if not self.processing:
-            return  # already canceled or reset
-        
-            # ❌ Desactiva el seguidor de línea
+            return
+
         self.enable_pub.publish(Int16(data=0))
-        
+        self.line_vel_pub.publish(Twist())  # stop the line follower
         self.publish_path()
         self.call_switch('ik')
         self.get_logger().info("🚀 Trayectoria activada después del retraso")
-        
-        # prevent multiple timer firings (ROS2 doesn't guarantee oneshot behavior by default)
-        self.processing = 'started'
+
+        # cancel timer explicitly
+        if self.once_timer:
+            self.once_timer.cancel()
+            self.once_timer = None
+
+        self.processing = True
 
 
     # --------------------------------------------------  IMAGE DEBUG
@@ -208,8 +200,10 @@ class TurnManager(Node):
                 cv2.putText(cv_img, str(k+1), (u+5, v-5),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
 
-        self.img_pub.publish(self.bridge.cv2_to_imgmsg(cv_img, 'bgr8',
-                                                       header=msg.header))
+        img_msg = self.bridge.cv2_to_imgmsg(cv_img, 'bgr8')
+        img_msg.header = msg.header
+        self.img_pub.publish(img_msg)
+
 
     # --------------------------------------------------  GENERAR BÉZIER
     def build_waypoints(self, target_x, target_y, event):
@@ -276,7 +270,7 @@ class TurnManager(Node):
 
             # 🛑 Publish zero velocity to stop the robot
             stop_twist = Twist()
-            self.vel_pub.publish(stop_twist)
+            self.ik_vel_pub.publish(stop_twist)
 
             # ✅ Reactivate the line follower
             self.enable_pub.publish(Int16(data=1))
