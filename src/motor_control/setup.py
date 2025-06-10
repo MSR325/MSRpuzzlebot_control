@@ -51,6 +51,7 @@ setup(
             'robust_line_follower = motor_control.robust_line_follower:main',
             'detection_fsm = motor_control.detection_fsm:main',
             'teleop_twist_joy = motor_control.teleop_twist_joy:main', 
+            'curve_control = motor_control.curve_control:main',
         ],
     },
 )
