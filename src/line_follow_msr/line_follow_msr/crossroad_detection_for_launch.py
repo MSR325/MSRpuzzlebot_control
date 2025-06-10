@@ -7,6 +7,7 @@ import numpy as np
 from std_msgs.msg import Int32MultiArray, Int16
 from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
+import math
 '''
 ESTE NODO VE A PARTIR DE 15 cm efrente del robot y termina de ver a los 15 + 26.4 cm aprox (alto)
 (ancho) aprox 30 cm de lado a lado
