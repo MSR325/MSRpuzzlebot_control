@@ -158,9 +158,9 @@ class TurnManager(Node):
             return
 
         self.enable_pub.publish(Int16(data=0))
-        self.line_vel_pub.publish(Twist())  # stop the line follower
         self.publish_path()
         self.call_switch('ik')
+        self.line_vel_pub.publish(Twist())  # stop the line follower
         self.get_logger().info("🚀 Trayectoria activada después del retraso")
 
         # cancel timer explicitly
