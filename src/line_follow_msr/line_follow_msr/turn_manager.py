@@ -149,6 +149,10 @@ class TurnManager(Node):
     def _start_trajectory_once(self):
         if not self.processing:
             return  # already canceled or reset
+        
+            # ❌ Desactiva el seguidor de línea
+        self.enable_pub.publish(Int16(data=0))
+        
         self.publish_path()
         self.call_switch('ik')
         self.get_logger().info("🚀 Trayectoria activada después del retraso")
