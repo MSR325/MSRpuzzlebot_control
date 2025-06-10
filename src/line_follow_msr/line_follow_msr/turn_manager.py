@@ -106,6 +106,7 @@ class TurnManager(Node):
         if self.processing is True or self.pose is None or self.current_event is None:
             return
         
+        Hx, Hy, Lx, Ly, Rx, Ry = msg.data
         if self.current_event == 'FORWARD':
             if Hx >= 9999:
                 return
