@@ -106,16 +106,33 @@ class TurnManager(Node):
         if self.processing is True or self.pose is None or self.current_event is None:
             return
         
-        Hx, Hy, Lx, Ly, Rx, Ry = msg.data
         if self.current_event == 'FORWARD':
-            if Hx >= 9999: return
+            if Hx >= 9999:
+                return
             px_w, py_w = Hx, Hy
+
         elif self.current_event == 'LEFT_TURN':
-            if Lx >= 9999: return
-            px_w, py_w = Lx, Ly
+            if Lx >= 9999:
+                if Hx >= 9999:
+                    return  # can't estimate without horizontal line
+                # estimate LEFT from horizontal centroid
+                px_w = Hx - int(self.warp_w * self.y_offset_m / self.x_meter_range)
+                py_w = Hy + int(self.warp_h * self.y_offset_m / self.y_meter_range)
+                self.get_logger().warn("🧠 Estimando giro IZQUIERDA a partir de línea horizontal")
+            else:
+                px_w, py_w = Lx, Ly
+
         elif self.current_event == 'RIGHT_TURN':
-            if Rx >= 9999: return
-            px_w, py_w = Rx, Ry
+            if Rx >= 9999:
+                if Hx >= 9999:
+                    return  # can't estimate without horizontal line
+                # estimate RIGHT from horizontal centroid
+                px_w = Hx + int(self.warp_w * self.y_offset_m / self.x_meter_range)
+                py_w = Hy + int(self.warp_h * self.y_offset_m / self.y_meter_range)
+                self.get_logger().warn("🧠 Estimando giro DERECHA a partir de línea horizontal")
+            else:
+                px_w, py_w = Rx, Ry
+
 
         # ---------- aplicar flips coherentes ----------
         if self.flip_x:
