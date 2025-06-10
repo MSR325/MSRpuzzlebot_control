@@ -37,7 +37,7 @@ class YOLOEventRelay(Node):
         }
 
         # Umbral mínimo de confianza para reenviar
-        self.min_conf = 0.6
+        self.min_conf = 0.7
 
         # Suscripción a detecciones YOLO
         self.sub = self.create_subscription(

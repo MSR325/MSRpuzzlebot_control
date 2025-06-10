@@ -30,8 +30,8 @@ class LineFollowerCentroid(Node):
         # —————— Parámetros dinámicos ——————
         # Control P
         self.declare_parameter('Kp_x',             0.01)
-        self.declare_parameter('Kp_ang',           0.019)
-        self.declare_parameter('xVel',             0.175)
+        self.declare_parameter('Kp_ang',           0.016)
+        self.declare_parameter('xVel',             0.13)
         self.declare_parameter('ang_e_thrsh',      2.0)
 
         # Umbral mínimo de área para filtrar contornos
@@ -239,6 +239,10 @@ class LineFollowerCentroid(Node):
         return binary
 
     def timer_callback(self):
+        
+        if self.active_line == 0:
+            return
+
         """Lazo principal de percepción + selección de la M real + control P a 50 Hz."""
         frame = self.latest_frame
         if frame is None:
