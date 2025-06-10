@@ -52,6 +52,47 @@ class YOLOEventRelay(Node):
         self.get_logger().info("yolo_event_relay iniciado con mapeo de nombres corregidos.")
 
     def cb_relay(self, msg: Detection2DArray):
+        valid_detections = []
+        
+        for det in msg.detections:
+            if not det.results:
+                continue
+            res = det.results[0]
+
+            # confidence filtering
+            if res.hypothesis.score < self.min_conf:
+                continue
+
+            # mapping
+            clase_name = self.classes.get(res.hypothesis.class_id)
+            evento = self.class_to_event.get(clase_name)
+
+            if evento:
+                #calculate area
+                bbox = det.bbox
+                area = bbox.size_x * bbox.size_y
+                
+                valid_detections.append({
+                    'detection': det,
+                    'result': res,
+                    'clase_name': clase_name,
+                    'evento': evento,
+                    'area': area
+                })
+        
+        # publish on max area detection
+        if valid_detections:
+            largest_detection = max(valid_detections, key=lambda x: x['area'])
+            
+            self.pub.publish(String(data=largest_detection['evento']))
+            self.get_logger().debug(
+                f"evento mapeado xdxdxd: {largest_detection['evento']} "
+                f"(clase '{largest_detection['clase_name']}', "
+                f"conf={largest_detection['result'].hypothesis.score:.2f}, "
+                f"area={largest_detection['area']:.2f})"
+            )
+
+    def cb_relay(self, msg: Detection2DArray):
         for det in msg.detections:
             if not det.results:
                 continue
