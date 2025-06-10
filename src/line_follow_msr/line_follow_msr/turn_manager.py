@@ -16,6 +16,7 @@ from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Int16  # for enable_line_follow
+from threading import Timer
 
 
 class TurnManager(Node):
@@ -142,14 +143,9 @@ class TurnManager(Node):
                                                       target_y = x_lat,
                                                       event    = self.current_event)
         self.get_logger().info("🕒 Esperando 1.5 segundos antes de ejecutar la curva...")
-        if self.delayed_timer is not None:
-            self.delayed_timer.cancel()
+        self.processing = True  # Mark as started
+        Timer(1.5, self._start_trajectory_once).start()
 
-        self.delayed_timer = self.create_timer(
-            1.5, self._start_trajectory_once, callback_group=None
-        )
-
-        self.processing = True
         self._centroid_buffer.clear()
 
     def _start_trajectory_once(self):
