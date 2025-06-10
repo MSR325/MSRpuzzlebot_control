@@ -23,6 +23,8 @@ class TurnManager(Node):
     def __init__(self):
         super().__init__('turn_manager')
 
+        self._once_timer
+
         # ---------- ROI warp (300×300 px) y escala física ----------
         self.warp_w          = 300          # px
         self.warp_h          = 300          # px
@@ -144,19 +146,26 @@ class TurnManager(Node):
                                                       event    = self.current_event)
         self.get_logger().info("🕒 Esperando 1.5 segundos antes de ejecutar la curva...")
         self.processing = True  # Mark as started
-        Timer(1.5, self._start_trajectory_once).start()
+        if self._once_timer is not None:
+            self._once_timer.cancel()
+
+        self._once_timer = self.create_timer(
+            1.5, self._start_trajectory_once
+        )
 
         self._centroid_buffer.clear()
 
     def _start_trajectory_once(self):
+        self.get_logger().warn("🔥 Timer fired → starting trajectory")
+
+        if self._once_timer is not None:
+            self._once_timer.cancel()
+            self._once_timer = None
+
         if not self.processing or self.processing == 'started':
+            self.get_logger().warn("🚫 Skipping: already processed or invalid state")
             return
 
-        if self.delayed_timer is not None:
-            self.delayed_timer.cancel()
-            self.delayed_timer = None
-
-        # 🟠 Ensure waypoints exist
         if not self.current_waypoints:
             self.get_logger().error("❌ No waypoints to publish!")
             return
@@ -166,6 +175,7 @@ class TurnManager(Node):
         self.call_switch('ik')
         self.get_logger().info("🚀 Trayectoria activada después del retraso")
         self.processing = 'started'
+
 
 
 
