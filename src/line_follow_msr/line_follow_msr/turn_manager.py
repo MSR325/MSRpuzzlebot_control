@@ -142,7 +142,12 @@ class TurnManager(Node):
                                                       target_y = x_lat,
                                                       event    = self.current_event)
         self.get_logger().info("🕒 Esperando 1.5 segundos antes de ejecutar la curva...")
-        self.create_timer(1.5, self._start_trajectory_once, callback_group=None)
+        timer = self.create_timer(
+            1.5, self._start_trajectory_once, callback_group=None, 
+            timer_period_sec=0.0  # ignored, safe to leave
+        )
+        timer.cancel()  # cancel immediately to prevent reuse
+        
         self.processing = True
         self._centroid_buffer.clear()
 
