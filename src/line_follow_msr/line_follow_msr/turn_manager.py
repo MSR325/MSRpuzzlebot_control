@@ -45,6 +45,8 @@ class TurnManager(Node):
         self.flip_x = self.get_parameter('flip_warp_x').value
         self.flip_y = self.get_parameter('flip_warp_y').value
 
+        self.delayed_timer = None
+
         # ---------- homografías ----------
         try:
             H_img2warp = np.load(h_path)             # imagen → warp
@@ -142,28 +144,28 @@ class TurnManager(Node):
                                                       target_y = x_lat,
                                                       event    = self.current_event)
         self.get_logger().info("🕒 Esperando 1.5 segundos antes de ejecutar la curva...")
-        timer = self.create_timer(
-            1.5, self._start_trajectory_once, callback_group=None, 
-            timer_period_sec=0.0  # ignored, safe to leave
-        )
-        timer.cancel()  # cancel immediately to prevent reuse
+
+        self.delayed_timer = self.create_timer(1.5, self._start_trajectory_once)
         
         self.processing = True
         self._centroid_buffer.clear()
 
     def _start_trajectory_once(self):
-        if not self.processing:
-            return  # already canceled or reset
+        if not self.processing or self.processing == 'started':
+            return
         
-            # ❌ Desactiva el seguidor de línea
+        if self.delayed_timer is not None:
+            self.delayed_timer.cancel()
+            self.delayed_timer = None
+
+        # ❌ Desactiva el seguidor de línea
         self.enable_pub.publish(Int16(data=0))
-        
+
         self.publish_path()
         self.call_switch('ik')
         self.get_logger().info("🚀 Trayectoria activada después del retraso")
-        
-        # prevent multiple timer firings (ROS2 doesn't guarantee oneshot behavior by default)
         self.processing = 'started'
+
 
 
     # --------------------------------------------------  IMAGE DEBUG
