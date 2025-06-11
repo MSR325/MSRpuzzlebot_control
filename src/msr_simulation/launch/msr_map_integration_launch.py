@@ -8,92 +8,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
-    left_motor_node = Node(
-        namespace='left',
-        name='motor_sys',
-        package='motor_control',
-        executable='dc_motor',
-        emulate_tty=True,
-        output='screen',
-        parameters=[{
-            'sample_time': 0.018,
-            'armature_inductance_La': 3.3e-3,
-            'armature_resistance_Ra': 0.5,
-            'motor_const_Ka': 0.018,
-            'back_emf_const_Kb': 0.06,
-            'motor_inertia_Jm': 0.0005,
-            'motor_friction_b': 0.0027,
-            'load_torque_tau_c': 0.0,
-        }]
-    )
-
-    left_ctrl_node = Node(
-        namespace='left',
-        name='ctrl',
-        package='motor_control',
-        executable='ctrl',
-        emulate_tty=True,
-        output='screen',
-        parameters=[{
-            'sample_time': 0.018,
-            'kP': 75.0,
-            'kI': 0.5,
-            'kD': 20.0,
-            'La': 3.3e-3,
-            'Ra': 0.5,
-            'Ka': 0.018,
-            'Kb': 0.06,
-            'Jm': 0.0005,
-            'b': 0.0027,
-            'tau_c': 0.0,
-            'vmin': -6.0,
-            'vmax': 6.0
-        }]
-    )
-
-    right_motor_node = Node(
-        namespace='right',
-        name='motor_sys',
-        package='motor_control',
-        executable='dc_motor',
-        emulate_tty=True,
-        output='screen',
-        parameters=[{
-            'sample_time': 0.018,
-            'armature_inductance_La': 3.3e-3,
-            'armature_resistance_Ra': 0.5,
-            'motor_const_Ka': 0.018,
-            'back_emf_const_Kb': 0.06,
-            'motor_inertia_Jm': 0.0005,
-            'motor_friction_b': 0.0027,
-            'load_torque_tau_c': 0.0,
-        }]
-    )
-
-    right_ctrl_node = Node(
-        namespace='right',
-        name='ctrl',
-        package='motor_control',
-        executable='ctrl',
-        emulate_tty=True,
-        output='screen',
-        parameters=[{
-            'sample_time': 0.018,
-            'kP': 75.0,
-            'kI': 0.5,
-            'kD': 20.0,
-            'La': 3.3e-3,
-            'Ra': 0.5,
-            'Ka': 0.018,
-            'Kb': 0.06,
-            'Jm': 0.0005,
-            'b': 0.0027,
-            'tau_c': 0.0,
-            'vmin': -6.0,
-            'vmax': 6.0
-        }]
-    )
-
+    
     odom_node = Node(
         name='odometry',
         package='motor_control',
@@ -197,6 +112,22 @@ def generate_launch_description():
         )
     )
 
+    turn_manager_node = Node(
+        name='turn_manager_node',
+        package='line_follow_msr',
+        executable='turn_manager',
+        emulate_tty=True,
+        output='screen'
+    )
+
+    curve_control_node = Node(
+        name='curve_control_node',
+        package='motor_control',
+        executable='curve_control',
+        emulate_tty=True,
+        output='screen'
+    )
+
     open_tmux_terminals = ExecuteProcess(
         cmd=[
             'gnome-terminal',
@@ -220,10 +151,6 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        left_motor_node,
-        left_ctrl_node,
-        right_motor_node,
-        right_ctrl_node,
         odom_node,
         inverse_kinematics_node,
         cmd_mux_node, 
@@ -235,5 +162,7 @@ def generate_launch_description():
         static_tf_pub_node,
         pose_saver_node,
         undistort_frames_node,
-        crossroad_detection_node
+        crossroad_detection_node,
+        turn_manager_node,
+        curve_control_node,
     ])

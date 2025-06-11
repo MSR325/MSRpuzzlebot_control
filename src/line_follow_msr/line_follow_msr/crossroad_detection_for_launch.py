@@ -69,7 +69,7 @@ class CrossroadDetector(Node):
     def enable_callback(self, msg: Int16):
         self.active_crossroad_detection = msg.data
         state = "✅ ENABLED" if msg.data == 1 else "⛔ DISABLED"
-        self.get_logger().info(f"Crossroad detection is now {state}")
+        # self.get_logger().info(f"Crossroad detection is now {state}")
 
         if msg.data == 1:
             self.create_control_window()
@@ -444,7 +444,7 @@ class CrossroadDetector(Node):
 
             cross_center = (sum(cx_list) // len(cx_list), sum(cy_list) // len(cy_list))
             cv2.circle(warped, cross_center, 6, (0, 255, 255), -1)
-            self.get_logger().info(f"🚦 Centro del cruce (aprox): {cross_center}")
+            # self.get_logger().info(f"🚦 Centro del cruce (aprox): {cross_center}")
 
         # --- Show image ---
         scale = 1.0 + max(1, self.safe_get('Scale', 2) | 1) / 10.0
@@ -454,7 +454,7 @@ class CrossroadDetector(Node):
 
     def decision_callback(self, msg: Int16):
         self.crossroad_decision = msg.data
-        self.get_logger().info(f'📍 crossroad_decision set to: {self.crossroad_decision}')
+        # self.get_logger().info(f'📍 crossroad_decision set to: {self.crossroad_decision}')
 
     def _remap(self, pt):
         """Return centroid unchanged; only substitutes 9999 if not detected."""

@@ -150,6 +150,22 @@ def generate_launch_description():
         output='screen'
     )
 
+    turn_manager = Node(
+        name='turn_manager',
+        package='line_follow_msr',
+        executable='turn_manager',
+        emulate_tty=True,
+        output='screen'
+    )
+
+    trajectory_executor = Node(
+        name='trajectory_executor',
+        package='motor_control',
+        executable='trajectory_executor',
+        emulate_tty=True,
+        output='screen'
+    )
+
     return LaunchDescription([
         odom_node,
         inverse_kinematics_node,
@@ -164,4 +180,6 @@ def generate_launch_description():
         undistort_frames_node,
         crossroad_detection_node,
         yolo_map_event,
+        turn_manager,
+        trajectory_executor,
     ])

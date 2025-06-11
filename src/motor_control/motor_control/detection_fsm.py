@@ -59,7 +59,7 @@ class DetectionFSM(Node):
             action = 0.5
             label = "🟨 CAUTION"
 
-        self.get_logger().info(f"{label} ← {self.current_flags}")
+        # self.get_logger().info(f"{label} ← {self.current_flags}")
         self.pub.publish(Float32(data=action))
 
 def main(args=None):

@@ -19,7 +19,7 @@ fi
 tmux new-session -d -s msr \; \
   send-keys 'source install/setup.bash && ros2 run motor_control teleop_twist_keyboard' Enter \; \
   split-window -h \; \
-  send-keys 'source install/setup.bash && ros2 run msr_simulation trajectory_commander' Enter \; \
+  send-keys 'source install/setup.bash && ros2 run msr_simulation trajectory_commander_params' Enter \; \
   select-pane -L \; \
   split-window -v \; \
   send-keys 'source install/setup.bash && ros2 run map_context_tests map_tagger' Enter \; \
