@@ -6,7 +6,8 @@ from nav_msgs.msg import Path as PathMsg
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Image
 from nav_msgs.msg import Odometry
-from custom_interfaces.srv import SwitchPublisher
+from lifecycle_msgs.srv import ChangeState
+from lifecycle_msgs.msg import Transition
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from cv_bridge import CvBridge
 import cv2
@@ -15,7 +16,7 @@ import math
 from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Int16  # for enable_line_follow
+from std_msgs.msg import Int16
 
 
 class TurnManager(Node):
@@ -37,6 +38,8 @@ class TurnManager(Node):
         self.declare_parameter('arrival_tolerance', 0.02)
         self.declare_parameter('flip_warp_x', False)
         self.declare_parameter('flip_warp_y', False)
+        self.declare_parameter('line_follower_node', 'line_follower')
+        self.declare_parameter('trajectory_controller_node', 'trajectory_controller')
 
         rel_path = self.get_parameter('homography_matrix_path').value
         pkg_share = get_package_share_directory('line_follow_msr')
@@ -46,6 +49,10 @@ class TurnManager(Node):
         self.tol    = self.get_parameter('arrival_tolerance').value
         self.flip_x = self.get_parameter('flip_warp_x').value
         self.flip_y = self.get_parameter('flip_warp_y').value
+        
+        # Node names for lifecycle management
+        self.line_node_name = self.get_parameter('line_follower_node').value
+        self.traj_node_name = self.get_parameter('trajectory_controller_node').value
 
         # ---------- homografías ----------
         try:
@@ -72,6 +79,15 @@ class TurnManager(Node):
             depth       = 10,
         )
 
+        # ---------- Lifecycle service clients ----------
+        self.line_lifecycle_client = self.create_client(
+            ChangeState, f'/{self.line_node_name}/change_state')
+        self.traj_lifecycle_client = self.create_client(
+            ChangeState, f'/{self.traj_node_name}/change_state')
+        
+        # Wait for lifecycle services
+        self._wait_for_lifecycle_services()
+
         # ---------- I/O ROS ----------
         self.create_subscription(String,         '/fsm_event',            self.event_cb, 10)
         self.create_subscription(Int32MultiArray,'/crossroad_centroids',  self.cross_cb, 10)
@@ -81,16 +97,116 @@ class TurnManager(Node):
 
         self.wp_pub  = self.create_publisher(PathMsg,  '/turn_manager/waypoints', 10)
         self.img_pub = self.create_publisher(Image, '/turn_manager/debug_image', 10)
-        self.ik_vel_pub = self.create_publisher(Twist, '/ik_cmd_vel', 10)
-        self.line_vel_pub = self.create_publisher(Twist, '/line_cmd_vel', 10)
-        self.enable_pub = self.create_publisher(Int16, '/line_follow_enable', 10)
-
-        self.cli = self.create_client(SwitchPublisher, 'switch_cmd_source')
-        while not self.cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().warn("Esperando servicio switch_cmd_source...")
+        
+        # Direct velocity publishing (no more mux needed)
+        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
 
         self.create_subscription(Bool, '/completed_curve', self.curve_done_cb, 10)
-        self.get_logger().info("TurnManager listo")
+        self.get_logger().info("TurnManager with Lifecycle Management ready ✅")
+
+    def _wait_for_lifecycle_services(self):
+        """Wait for both lifecycle services to become available"""
+        self.get_logger().info("🔄 Waiting for lifecycle services...")
+        
+        # Wait for line follower lifecycle service
+        while not self.line_lifecycle_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().warn(f"Waiting for {self.line_node_name} lifecycle service...")
+        
+        # Wait for trajectory controller lifecycle service
+        while not self.traj_lifecycle_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().warn(f"Waiting for {self.traj_node_name} lifecycle service...")
+        
+        self.get_logger().info("✅ All lifecycle services available")
+
+    def _change_lifecycle_state(self, client, transition_id, node_name="node"):
+        """Helper method to change lifecycle state"""
+        request = ChangeState.Request()
+        request.transition.id = transition_id
+        
+        future = client.call_async(request)
+        future.add_done_callback(
+            lambda f: self._lifecycle_transition_callback(f, node_name, transition_id)
+        )
+        return future
+
+    def _lifecycle_transition_callback(self, future, node_name, transition_id):
+        """Callback for lifecycle state changes"""
+        try:
+            response = future.result()
+            transition_name = {
+                Transition.TRANSITION_CONFIGURE: "configure",
+                Transition.TRANSITION_ACTIVATE: "activate", 
+                Transition.TRANSITION_DEACTIVATE: "deactivate",
+                Transition.TRANSITION_CLEANUP: "cleanup"
+            }.get(transition_id, f"transition_{transition_id}")
+            
+            if response.success:
+                self.get_logger().info(f"✅ {node_name} → {transition_name} SUCCESS")
+            else:
+                self.get_logger().error(f"❌ {node_name} → {transition_name} FAILED")
+        except Exception as e:
+            self.get_logger().error(f"Lifecycle transition exception: {e}")
+
+    def activate_line_following_mode(self):
+        """Switch to line following mode"""
+        self.get_logger().info("🔄 Switching to LINE FOLLOWING mode...")
+        
+        # Stop robot first
+        self.cmd_vel_pub.publish(Twist())
+        
+        # Deactivate trajectory controller
+        self._change_lifecycle_state(
+            self.traj_lifecycle_client, 
+            Transition.TRANSITION_DEACTIVATE,
+            self.traj_node_name
+        )
+        
+        # Activate line follower
+        self._change_lifecycle_state(
+            self.line_lifecycle_client,
+            Transition.TRANSITION_ACTIVATE,
+            self.line_node_name
+        )
+
+    def activate_trajectory_mode(self):
+        """Switch to trajectory following mode"""
+        self.get_logger().info("🔄 Switching to TRAJECTORY mode...")
+        
+        # Stop robot first
+        self.cmd_vel_pub.publish(Twist())
+        
+        # Deactivate line follower
+        self._change_lifecycle_state(
+            self.line_lifecycle_client,
+            Transition.TRANSITION_DEACTIVATE,
+            self.line_node_name
+        )
+        
+        # Activate trajectory controller
+        self._change_lifecycle_state(
+            self.traj_lifecycle_client,
+            Transition.TRANSITION_ACTIVATE,
+            self.traj_node_name
+        )
+
+    def emergency_stop_all(self):
+        """Emergency stop - deactivate all controllers"""
+        self.get_logger().warn("🚨 EMERGENCY STOP - Deactivating all controllers")
+        
+        # Stop robot immediately
+        self.cmd_vel_pub.publish(Twist())
+        
+        # Deactivate both controllers
+        self._change_lifecycle_state(
+            self.line_lifecycle_client,
+            Transition.TRANSITION_DEACTIVATE,
+            self.line_node_name
+        )
+        self._change_lifecycle_state(
+            self.traj_lifecycle_client,
+            Transition.TRANSITION_DEACTIVATE,
+            self.traj_node_name
+        )
 
     # --------------------------------------------------  CALLBACKS BÁSICOS
     def event_cb(self, msg: String):
@@ -102,13 +218,11 @@ class TurnManager(Node):
         self.current_event = msg.data
         self.get_logger().info(f"[FSM] Evento: {self.current_event}")
 
-
     def odom_cb(self, msg: Odometry):
         self.pose = msg.pose.pose.position        # x = adelante, y = izquierda
 
     # --------------------------------------------------  CROSSROAD → WAYPOINTS
     def cross_cb(self, msg: Int32MultiArray): 
-
         if self.processing is True or self.pose is None or self.current_event is None:
             return
         
@@ -148,28 +262,28 @@ class TurnManager(Node):
                                                       target_y = x_lat,
                                                       event    = self.current_event)
         self.get_logger().info("🕒 Esperando 1.5 segundos antes de ejecutar la curva...")
-        self.once_timer = self.create_timer(1.5, self._start_trajectory_once_once)
+        self.once_timer = self.create_timer(1.5, self._start_trajectory_once)
 
         self.processing = True
         self._centroid_buffer.clear()
 
-    def _start_trajectory_once_once(self):
+    def _start_trajectory_once(self):
+        """Start trajectory execution after delay"""
         if not self.processing:
             return
 
-        self.enable_pub.publish(Int16(data=0))
+        # Publish path for trajectory controller
         self.publish_path()
-        self.call_switch('ik')
-        self.line_vel_pub.publish(Twist())  # stop the line follower
+        
+        # Switch to trajectory mode using lifecycle
+        self.activate_trajectory_mode()
+        
         self.get_logger().info("🚀 Trayectoria activada después del retraso")
 
-        # cancel timer explicitly
+        # Cancel timer explicitly
         if self.once_timer:
             self.once_timer.cancel()
             self.once_timer = None
-
-        self.processing = True
-
 
     # --------------------------------------------------  IMAGE DEBUG
     def image_cb(self, msg: Image):
@@ -204,7 +318,6 @@ class TurnManager(Node):
         img_msg.header = msg.header
         self.img_pub.publish(img_msg)
 
-
     # --------------------------------------------------  GENERAR BÉZIER
     def build_waypoints(self, target_x, target_y, event):
         now = self.get_clock().now().to_msg()
@@ -229,7 +342,7 @@ class TurnManager(Node):
                 perpx, perpy =  vy/d, -vx/d
             else:
                 perpx, perpy = 0.0, 0.0
-            R = min(d, 0.10)          # radio máx 25 cm
+            R = min(d, 0.10)          # radio máx 10 cm
             ctrl = ((x0+x3)/2 + perpx*R,
                     (y0+y3)/2 + perpy*R)
 
@@ -256,32 +369,28 @@ class TurnManager(Node):
         self.wp_pub.publish(path)
         self.get_logger().info(f"Path publicado ({len(path.poses)} WPs)")
 
-    # --------------------------------------------------  CAMBIAR MUX
-    def call_switch(self, src):
-        req = SwitchPublisher.Request(); req.active_source = src
-        self.cli.call_async(req)
-
     # --------------------------------------------------  CALLBACK → CURVE DONE
     def curve_done_cb(self, msg: Bool):
         if msg.data and self.processing:
-            self.call_switch('line')
+            # Switch back to line following mode
+            self.activate_line_following_mode()
+            
             self.processing = False
             self.get_logger().info("🟢 Trayectoria completada → line follower activado")
 
-            # 🛑 Publish zero velocity to stop the robot
-            stop_twist = Twist()
-            self.ik_vel_pub.publish(stop_twist)
-
-            # ✅ Reactivate the line follower
-            self.enable_pub.publish(Int16(data=1))
 
 # ------------------------------------------------------  MAIN
 def main(args=None):
     rclpy.init(args=args)
     node = TurnManager()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("🛑 Shutting down TurnManager...")
+        node.emergency_stop_all()
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
