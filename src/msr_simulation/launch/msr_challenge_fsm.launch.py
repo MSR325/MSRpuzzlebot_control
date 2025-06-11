@@ -184,5 +184,5 @@ def generate_launch_description():
         yolo_launch,
         yolo_map_event,
         turn_manager_node,
-        curve_control_node,
+        #curve_control_node,
     ])

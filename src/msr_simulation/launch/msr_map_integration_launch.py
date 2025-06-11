@@ -225,7 +225,7 @@ def generate_launch_description():
         right_motor_node,
         right_ctrl_node,
         odom_node,
-        inverse_kinematics_node,
+        #inverse_kinematics_node,
         cmd_mux_node, 
         display_launch,
         detection_fsm_node,
