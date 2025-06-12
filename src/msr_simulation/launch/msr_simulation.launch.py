@@ -158,6 +158,16 @@ def generate_launch_description():
         output='screen'
     )
 
+
+    curve_control_node = Node(
+        name='curve_control_node',
+        package='motor_control',
+        executable='curve_control',
+        emulate_tty=True,
+        output='screen'
+    )
+
+
     trajectory_executor = Node(
         name='trajectory_executor',
         package='motor_control',
@@ -177,9 +187,10 @@ def generate_launch_description():
         path_generator_node,
         static_tf_pub_node,
         pose_saver_node,
-        undistort_frames_node,
+        # undistort_frames_node,
         crossroad_detection_node,
         yolo_map_event,
         turn_manager,
-        trajectory_executor,
+        # trajectory_executor,
+        curve_control_node,
     ])

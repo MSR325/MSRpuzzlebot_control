@@ -112,15 +112,15 @@ def generate_launch_description():
         )
     )
 
-    yolo_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory('msrsigndet'),
-                'launch',
-                'pc.launch.py'
-            )
-        )
-    )
+    # yolo_launch = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource(
+    #         os.path.join(
+    #             get_package_share_directory('msrsigndet'),
+    #             'launch',
+    #             'pc.launch.py'
+    #         )
+    #     )
+    # )
 
     yolo_map_event = Node(
         name='yolo_map_event',
@@ -181,7 +181,7 @@ def generate_launch_description():
         pose_saver_node,
         undistort_frames_node,
         crossroad_detection_node,
-        yolo_launch,
+        # yolo_launch,
         yolo_map_event,
         turn_manager_node,
         curve_control_node,

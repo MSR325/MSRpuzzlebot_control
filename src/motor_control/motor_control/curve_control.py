@@ -36,12 +36,14 @@ class PathFollower(Node):
                                   self._path_cb,   10)
         self.create_subscription(Odometry, '/odom',
                                   self._odom_cb,   40)
-        self.cmd_pub  = self.create_publisher(Twist, 'ik_cmd_vel', 10)
+        self.cmd_pub  = self.create_publisher(Twist, '/line_cmd_vel', 10)
         self.done_pub = self.create_publisher(Bool,  '/completed_curve', 10)
+
+        self._done_sent = False
 
         # ---------------- loop 100 Hz ----------------
         self.control_timer = self.create_timer(0.01, self.control_loop)
-        self.get_logger().info('🚀 ik_path_follower listo (100 Hz, sin ramp).')
+        self.get_logger().info('🚀 waypoint_path_follower listo (100 Hz, sin ramp).')
 
     # --------------------------------------------------  PARAM SYNC
     def _sync_params(self):
@@ -59,6 +61,7 @@ class PathFollower(Node):
     # --------------------------------------------------  CBs
     def _path_cb(self, msg: Path):
         self.current_path = list(msg.poses)
+        self._done_sent = False
         self.get_logger().info(f'Nueva trayectoria: {len(self.current_path)} WPs')
 
     def _odom_cb(self, msg: Odometry):
@@ -66,60 +69,59 @@ class PathFollower(Node):
 
     # --------------------------------------------------  PURE-PURSUIT LOOP
     def control_loop(self):
+        # 0) Need a valid pose
         if self.pose is None:
             return
-        if not self.current_path:
-            self.cmd_pub.publish(Twist())           # stop
-            self.done_pub.publish(Bool(data=True))  # done event
-            return
 
-        # 1) Pose actual
+        # 1) If there's no path, stop & signal done exactly once
+        if not self.current_path:
+            if not self._done_sent:
+                # send a zero twist to stop the robot
+                self.cmd_pub.publish(Twist())
+                # notify TurnManager that we're done
+                self.done_pub.publish(Bool(data=True))
+                self._done_sent = True
+            return
+        else:
+            # reset one-shot flag when a new path appears
+            self._done_sent = False
+
+        # 2) Read current pose & heading
         x   = self.pose.position.x
         y   = self.pose.position.y
         yaw = self._yaw_from_quat(self.pose.orientation)
 
-        # 2) Elimina WPs ya alcanzados
-        if self._dist_xy(self.current_path[-1].pose.position, x, y) < self.arrival_tol:
-            self.current_path.clear()  # will trigger stop+done on next cycle
+        # 3) Check arrival at final waypoint
+        last_wp = self.current_path[-1].pose.position
+        if self._dist_xy(last_wp, x, y) < self.arrival_tol:
+            # clear path; next cycle will publish stop+done
+            self.current_path.clear()
             return
 
-
-        if not self.current_path:
-            # ✅ Terminado
-            self.cmd_pub.publish(Twist())           # stop
-            self.done_pub.publish(Bool(data=True))  # evento
-            return
-
-        # 3) Punto objetivo = primer WP con dist > lookahead
+        # 4) Pure Pursuit: select look-ahead target
         target = self.current_path[0].pose.position
         for wp in self.current_path:
             if self._dist_xy(wp.pose.position, x, y) > self.lookahead:
                 target = wp.pose.position
                 break
 
-        # 4) Geometría Pure-Pursuit
+        # 5) Compute control commands
         dx    = target.x - x
         dy    = target.y - y
-        ld    = math.hypot(dx, dy)
         alpha = self._wrap(math.atan2(dy, dx) - yaw)
 
         v_cmd = self.v_ref
         w_cmd = 2.0 * v_cmd * math.sin(alpha) / self.lookahead
 
-        # 5) Saturar velocidades
+        # 6) Saturate velocities
         v_cmd = max(-self.v_max, min(self.v_max, v_cmd))
         w_cmd = max(-self.w_max, min(self.w_max, w_cmd))
 
-        # 6) Publicar comando (sin ramp)
+        # 7) Publish
         twist = Twist()
         twist.linear.x  = v_cmd
         twist.angular.z = w_cmd
         self.cmd_pub.publish(twist)
-
-        # 7) Detectar fin de trayectoria
-        last_wp = self.current_path[-1].pose.position
-        if self._dist_xy(last_wp, x, y) < self.arrival_tol:
-            self.current_path.clear()  # siguiente ciclo enviará stop
 
     # --------------------------------------------------  UTILS
     @staticmethod
